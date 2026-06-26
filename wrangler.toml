@@ -7,9 +7,9 @@ workers_dev = true
 # Nuxt(Nitro) がビルドした静的アセット
 assets = { directory = "./.output/public/", binding = "ASSETS" }
 
-# 公開してよい環境変数（Supabase URL / anon key はクライアントにも露出する公開情報）
-# DBパスワードなどの機密値はここに書かず、`wrangler secret put` で登録すること。
+# 環境変数（SUPABASE_URL / SUPABASE_KEY）は Cloudflare ダッシュボードの
+# 「Variables and Secrets」で管理する。
+# ※ ここ([vars])に書くと wrangler deploy 時にダッシュボードの値を上書きするため、
+#    ダッシュボード管理にする場合は定義しないこと。
+# DBパスワードなどの機密値は `wrangler secret put` で登録すること。
 # 例) npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-[vars]
-SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"
-SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"
