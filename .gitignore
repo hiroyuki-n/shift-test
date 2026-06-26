@@ -12,6 +12,13 @@ node_modules
 
 # Env
 .env
+.dev.vars
+
+# Secrets / 資料（DBパスワード等の機密情報を含む）
+_資料/
+
+# Cloudflare
+.wrangler
 
 # Misc
 .DS_Store

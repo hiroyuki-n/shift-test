@@ -1,33 +1,45 @@
 # シフト管理システム（マルチテナント型）
 
 50店舗・約1,000人規模の飲食店向けマルチテナント型シフト管理システムの土台。
-**Nuxt 3 + TypeScript + Supabase (PostgreSQL) + Prisma ORM + Tailwind CSS** で構成しています。
+**Nuxt 3 + TypeScript + Supabase + Cloudflare Workers + Tailwind CSS** で構成しています。
 
 ## 技術スタック
 
-| 項目         | 内容                              |
-| ------------ | --------------------------------- |
-| フロント     | Nuxt 3 (Vue 3 / Composition API)  |
-| 言語         | TypeScript                        |
-| DB           | PostgreSQL (Supabase)             |
-| ORM          | Prisma                            |
-| スタイリング | Tailwind CSS                      |
+| 項目         | 内容                                            |
+| ------------ | ----------------------------------------------- |
+| フロント     | Nuxt 3 (Vue 3 / Composition API)                |
+| 言語         | TypeScript                                      |
+| デプロイ先   | Cloudflare Workers（Nitro `cloudflare_module`） |
+| DB / BaaS    | Supabase (PostgreSQL)                           |
+| DBアクセス   | `@nuxtjs/supabase`（supabase-js / HTTP経由）    |
+| スキーマ管理 | Prisma（マイグレーション・スキーマ定義専用）    |
+| スタイリング | Tailwind CSS                                    |
+
+> **データアクセス方針**: Cloudflare Workers ランタイムと相性の良い **supabase-js（HTTP/PostgREST経由）** を実行時のDBアクセスに使用します。
+> Prisma は **スキーマ定義とマイグレーション専用** とし、Workers 実行時には使用しません。
 
 ## ディレクトリ構造
 
 ```
 shift-test/
 ├── app.vue                          # ルートコンポーネント
-├── nuxt.config.ts                   # Nuxt 設定
+├── nuxt.config.ts                   # Nuxt 設定（Cloudflare preset + Supabase）
+├── wrangler.toml                    # Cloudflare Workers デプロイ設定
 ├── tailwind.config.ts               # Tailwind 設定
 ├── tsconfig.json
 ├── package.json
 ├── .env.example                     # 環境変数サンプル（Supabase接続情報）
+├── .dev.vars                        # Workers ローカル用環境変数（gitignore）
+├── types/
+│   └── database.types.ts            # Supabase 生成型のプレースホルダ
 ├── prisma/
-│   └── schema.prisma                # DBスキーマ（モデル・リレーション・インデックス）
+│   ├── schema.prisma                # DBスキーマ（モデル・リレーション・インデックス）
+│   └── seed.ts                      # ダミーデータ投入スクリプト
 ├── server/
+│   ├── api/
+│   │   └── shops.get.ts             # 店舗一覧API（supabase-js のサンプル）
 │   └── utils/
-│       └── prisma.ts                # PrismaClient シングルトン
+│       └── prisma.ts                # PrismaClient（マイグレーション/スクリプト用）
 └── pages/
     ├── index.vue                    # ロール別エントリ（開発用）
     ├── admin/
@@ -62,14 +74,42 @@ npm install
 
 # 2. 環境変数を設定（Supabaseの接続情報を記入）
 cp .env.example .env
+#   SUPABASE_URL / SUPABASE_KEY（anon key）を Supabase ダッシュボードから取得して記入
+#   DATABASE_URL / DIRECT_URL は Prisma migrate 用（DBパスワードを含む）
 
-# 3. Prisma Client 生成 & マイグレーション
+# 3. （DB初期化）Prisma でスキーマを反映 & ダミーデータ投入
 npm run prisma:generate
 npm run prisma:migrate
+npm run prisma:seed
 
 # 4. 開発サーバー起動
 npm run dev
 ```
 
-> 注: 認証・権限チェック（middleware）、API（`server/api/`）は本土台には含まれません。
-> 各ページはモックデータで動作します。
+## Cloudflare Workers へのデプロイ
+
+```bash
+# 1. Wrangler にログイン
+npx wrangler login
+
+# 2. 機密情報は Secrets で登録（wrangler.toml には書かない）
+#    SUPABASE_KEY を Secrets 管理にする場合や、service role key など
+npx wrangler secret put SUPABASE_KEY
+
+# 3. ビルド & デプロイ（nuxt build → wrangler deploy）
+npm run deploy
+```
+
+- `wrangler.toml` がデプロイ設定の単一の真実（`main` / `assets` / `[vars]`）。
+- 公開してよい値（`SUPABASE_URL` / anon `SUPABASE_KEY`）は `[vars]`、機密値は `wrangler secret put` で登録。
+- ローカルでの Workers エミュレーションは `.dev.vars` を使用（`npm run cf:dev`）。
+
+## Supabase 型定義の生成
+
+```bash
+npx supabase gen types typescript --project-id YOUR_PROJECT_REF > types/database.types.ts
+```
+
+> 注: 認証・権限チェック（middleware）は本土台には未実装です。
+> 画面はモックデータで動作し、`server/api/shops.get.ts` に supabase-js を使ったAPIのサンプルがあります。
+> 接続情報（`SUPABASE_URL` / `SUPABASE_KEY`）はプレースホルダのため、実際の値に置き換えてください。

@@ -1,0 +1,15 @@
+name = "shift-test"
+main = "./.output/server/index.mjs"
+compatibility_date = "2024-09-19"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Nuxt(Nitro) がビルドした静的アセット
+assets = { directory = "./.output/public/", binding = "ASSETS" }
+
+# 公開してよい環境変数（Supabase URL / anon key はクライアントにも露出する公開情報）
+# DBパスワードなどの機密値はここに書かず、`wrangler secret put` で登録すること。
+# 例) npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+[vars]
+SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"
+SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"

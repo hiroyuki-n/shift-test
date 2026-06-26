@@ -32,6 +32,12 @@ enum MembershipType {
   SUPPORT // ヘルプ（応援）で所属する店舗
 }
 
+/// 雇用形態（アルバイト or 社員）
+enum EmploymentType {
+  PART_TIME // アルバイト
+  FULL_TIME // 社員
+}
+
 /// 希望シフトの承認ステータス
 enum ShiftStatus {
   PENDING // 申請中（未処理）
@@ -58,6 +64,8 @@ model User {
   email     String   @unique
   name      String
   role      Role     @default(STAFF)
+  // 雇用形態（アルバイト/社員）。管理者など雇用形態を持たない場合は null
+  employmentType EmploymentType?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -79,6 +87,7 @@ model User {
   createdFinalShifts FinalShift[] @relation("FinalShiftCreatedBy")
 
   @@index([role])
+  @@index([employmentType])
   @@index([primaryShopId])
   @@index([email])
   @@map("users")
