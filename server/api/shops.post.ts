@@ -2,12 +2,11 @@ import { serverSupabaseClient } from '#supabase/server'
 
 /**
  * 店舗 新規作成API
- * POST /api/shops  body: { name: string, address?: string }
+ * POST /api/shops  body: { name: string }
  */
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{ name?: string; address?: string }>(event)
+  const body = await readBody<{ name?: string }>(event)
   const name = (body?.name ?? '').trim()
-  const address = (body?.address ?? '').trim() || null
 
   if (!name) {
     throw createError({ statusCode: 400, statusMessage: '店舗名は必須です' })
@@ -19,12 +18,10 @@ export default defineEventHandler(async (event) => {
   const { data, error } = await client
     .from('shops')
     .insert({
-      id: crypto.randomUUID(),
       name,
-      address,
       updatedAt: new Date().toISOString(),
     })
-    .select('id, name, address, createdAt')
+    .select('id, name, createdAt')
     .single()
 
   if (error) {

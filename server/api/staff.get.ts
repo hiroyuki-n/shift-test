@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
 
   const { data, error } = await client
     .from('users')
-    .select('id, name, email, employmentType, role, primaryShopId')
+    .select('id, name, employmentType, role, primaryShopId')
     .eq('role', 'STAFF')
     .order('name', { ascending: true })
 

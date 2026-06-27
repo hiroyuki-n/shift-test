@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
 
   const { data: shops, error } = await client
     .from('shops')
-    .select('id, name, address, createdAt')
+    .select('id, name, createdAt')
     .order('createdAt', { ascending: false })
 
   if (error) {

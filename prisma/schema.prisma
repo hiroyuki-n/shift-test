@@ -60,9 +60,10 @@ enum Position {
 
 /// ユーザー（本社管理者・店長・スタッフ）
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique
+  id        Int      @id @default(autoincrement())
   name      String
+  // ログイン用パスワードのハッシュ（PBKDF2）。未設定ユーザーは null
+  passwordHash String?
   role      Role     @default(STAFF)
   // 雇用形態（アルバイト/社員）。管理者など雇用形態を持たない場合は null
   employmentType EmploymentType?
@@ -71,7 +72,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   // メイン店舗（任意）。SUPER_ADMIN は本社所属のため null を許容
-  primaryShopId String? @db.Uuid
+  primaryShopId Int?
   primaryShop   Shop?   @relation("PrimaryShopMembers", fields: [primaryShopId], references: [id], onDelete: SetNull)
 
   // 多対多: ヘルプ含む全所属店舗（中間テーブル ShopMembership 経由）
@@ -89,15 +90,13 @@ model User {
   @@index([role])
   @@index([employmentType])
   @@index([primaryShopId])
-  @@index([email])
   @@map("users")
 }
 
 /// 店舗
 model Shop {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        Int      @id @default(autoincrement())
   name      String
-  address   String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -119,9 +118,9 @@ model Shop {
 
 /// 中間テーブル: ユーザー × 店舗（多対多 / ヘルプ応援対応）
 model ShopMembership {
-  id     String @id @default(uuid()) @db.Uuid
-  userId String @db.Uuid
-  shopId String @db.Uuid
+  id     Int @id @default(autoincrement())
+  userId Int
+  shopId Int
 
   // 所属種別（メイン or ヘルプ）
   type MembershipType @default(PRIMARY)
@@ -141,7 +140,7 @@ model ShopMembership {
 
 /// 希望シフト（スタッフが提出）
 model ShiftRequest {
-  id        String      @id @default(uuid()) @db.Uuid
+  id        Int         @id @default(autoincrement())
   // 対象日（日付のみ）
   date      DateTime    @db.Date
   startTime DateTime    @db.Timestamptz(6)
@@ -153,11 +152,11 @@ model ShiftRequest {
   updatedAt DateTime @updatedAt
 
   // 提出者
-  userId String @db.Uuid
+  userId Int
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // 希望対象の店舗（自店舗 or ヘルプ先）
-  shopId String @db.Uuid
+  shopId Int
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   // 大量データ・絞り込み検索用の複合インデックス
@@ -170,7 +169,7 @@ model ShiftRequest {
 
 /// 確定シフト（店長が確定）
 model FinalShift {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        Int      @id @default(autoincrement())
   date      DateTime @db.Date
   startTime DateTime @db.Timestamptz(6)
   endTime   DateTime @db.Timestamptz(6)
@@ -180,15 +179,15 @@ model FinalShift {
   updatedAt DateTime @updatedAt
 
   // アサインされたスタッフ
-  userId String @db.Uuid
+  userId Int
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // 対象店舗
-  shopId String @db.Uuid
+  shopId Int
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   // 確定操作を行った店長（監査用 / 任意）
-  createdById String? @db.Uuid
+  createdById Int?
   createdBy   User?   @relation("FinalShiftCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   // カレンダー表示・集計用の複合インデックス

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { BuildingStorefrontIcon, UserGroupIcon, ClockIcon, PlusIcon, ArrowRightIcon } from '@heroicons/vue/24/outline'
+
+definePageMeta({ layout: 'admin' })
+
 /**
  * 管理ページ（本社用ダッシュボード）
  * 対象Role: SUPER_ADMIN
@@ -13,7 +17,6 @@
 interface Shop {
   id: string
   name: string
-  address: string | null
   createdAt: string
   staffCount: number
 }
@@ -33,7 +36,7 @@ const dashboard = computed(() => ({
 
 // --- 店舗新規追加フォーム ---
 const showForm = ref(false)
-const newShop = reactive({ name: '', address: '' })
+const newShop = reactive({ name: '' })
 const submitting = ref(false)
 const formError = ref('')
 
@@ -44,10 +47,9 @@ async function addShop() {
   try {
     await $fetch('/api/shops', {
       method: 'POST',
-      body: { name: newShop.name.trim(), address: newShop.address.trim() },
+      body: { name: newShop.name.trim() },
     })
     newShop.name = ''
-    newShop.address = ''
     showForm.value = false
     await refresh()
   } catch (e: unknown) {
@@ -63,34 +65,41 @@ function formatDate(value: string) {
 </script>
 
 <template>
-  <main class="min-h-screen bg-slate-50 p-6">
-    <div class="mx-auto max-w-6xl">
+  <div class="mx-auto max-w-5xl p-8">
       <!-- ヘッダー -->
       <header class="mb-8 flex items-center justify-between">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-wider text-brand">SUPER ADMIN</p>
           <h1 class="text-2xl font-bold text-slate-800">本社管理ダッシュボード</h1>
         </div>
         <button
-          class="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark"
+          class="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark"
           @click="showForm = !showForm"
         >
-          + 店舗を追加
+          <PlusIcon class="h-4 w-4" />店舗を追加
         </button>
       </header>
 
       <!-- KPIカード -->
       <section class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <article class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p class="text-sm text-slate-500">登録店舗数</p>
+          <div class="flex items-center gap-2 text-slate-500">
+            <BuildingStorefrontIcon class="h-4 w-4" />
+            <p class="text-sm">登録店舗数</p>
+          </div>
           <p class="mt-1 text-3xl font-bold text-slate-800">{{ dashboard.shopCount }}</p>
         </article>
         <article class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p class="text-sm text-slate-500">総スタッフ数</p>
+          <div class="flex items-center gap-2 text-slate-500">
+            <UserGroupIcon class="h-4 w-4" />
+            <p class="text-sm">総スタッフ数</p>
+          </div>
           <p class="mt-1 text-3xl font-bold text-slate-800">{{ dashboard.staffTotal }}</p>
         </article>
         <article class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p class="text-sm text-slate-500">承認待ちシフト</p>
+          <div class="flex items-center gap-2 text-slate-500">
+            <ClockIcon class="h-4 w-4" />
+            <p class="text-sm">承認待ちシフト</p>
+          </div>
           <p class="mt-1 text-3xl font-bold text-amber-500">{{ dashboard.pendingRequests }}</p>
         </article>
       </section>
@@ -98,7 +107,7 @@ function formatDate(value: string) {
       <!-- 店舗追加フォーム -->
       <section v-if="showForm" class="mb-8 rounded-xl border border-brand/30 bg-white p-6 shadow-sm">
         <h2 class="mb-4 text-lg font-semibold text-slate-800">店舗を新規追加</h2>
-        <form class="grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="addShop">
+        <form class="grid grid-cols-1 gap-4" @submit.prevent="addShop">
           <label class="block">
             <span class="mb-1 block text-sm font-medium text-slate-600">店舗名</span>
             <input
@@ -109,17 +118,8 @@ function formatDate(value: string) {
               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
             />
           </label>
-          <label class="block">
-            <span class="mb-1 block text-sm font-medium text-slate-600">住所</span>
-            <input
-              v-model="newShop.address"
-              type="text"
-              placeholder="例: 東京都豊島区西池袋1-1-1"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-            />
-          </label>
-          <p v-if="formError" class="text-sm text-rose-600 sm:col-span-2">{{ formError }}</p>
-          <div class="sm:col-span-2">
+          <p v-if="formError" class="text-sm text-rose-600">{{ formError }}</p>
+          <div>
             <button
               type="submit"
               :disabled="submitting"
@@ -147,7 +147,6 @@ function formatDate(value: string) {
           <thead class="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th class="px-6 py-3">店舗名</th>
-              <th class="px-6 py-3">住所</th>
               <th class="px-6 py-3 text-right">スタッフ数</th>
               <th class="px-6 py-3">作成日</th>
               <th class="px-6 py-3 text-right">操作</th>
@@ -156,16 +155,16 @@ function formatDate(value: string) {
           <tbody class="divide-y divide-slate-100">
             <tr v-for="shop in shops" :key="shop.id" class="hover:bg-slate-50">
               <td class="px-6 py-4 font-medium text-slate-800">{{ shop.name }}</td>
-              <td class="px-6 py-4 text-slate-600">{{ shop.address ?? '—' }}</td>
               <td class="px-6 py-4 text-right text-slate-600">{{ shop.staffCount }}</td>
               <td class="px-6 py-4 text-slate-500">{{ formatDate(shop.createdAt) }}</td>
               <td class="px-6 py-4 text-right">
-                <NuxtLink :to="`/shop/${shop.id}`" class="font-medium text-brand hover:underline">管理画面へ</NuxtLink>
+                <NuxtLink :to="`/shop/${shop.id}`" class="inline-flex items-center gap-1 font-medium text-brand hover:underline">
+                  管理画面へ<ArrowRightIcon class="h-3.5 w-3.5" />
+                </NuxtLink>
               </td>
             </tr>
           </tbody>
         </table>
       </section>
-    </div>
-  </main>
+  </div>
 </template>

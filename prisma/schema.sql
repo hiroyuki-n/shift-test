@@ -21,24 +21,23 @@ CREATE TYPE "Position" AS ENUM ('HALL', 'KITCHEN', 'CASHIER', 'MANAGER', 'OTHER'
 
 -- CreateTable
 CREATE TABLE "users" (
-    "id" UUID NOT NULL,
-    "email" TEXT NOT NULL,
+    "id" SERIAL,
     "name" TEXT NOT NULL,
+    "passwordHash" TEXT,
     "role" "Role" NOT NULL DEFAULT 'STAFF',
     "employmentType" "EmploymentType",
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "primaryShopId" UUID,
+    "primaryShopId" INTEGER,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "shops" (
-    "id" UUID NOT NULL,
+    "id" SERIAL,
     "name" TEXT NOT NULL,
-    "address" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -48,9 +47,9 @@ CREATE TABLE "shops" (
 
 -- CreateTable
 CREATE TABLE "shop_memberships" (
-    "id" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "shopId" UUID NOT NULL,
+    "id" SERIAL,
+    "userId" INTEGER NOT NULL,
+    "shopId" INTEGER NOT NULL,
     "type" "MembershipType" NOT NULL DEFAULT 'PRIMARY',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -59,7 +58,7 @@ CREATE TABLE "shop_memberships" (
 
 -- CreateTable
 CREATE TABLE "shift_requests" (
-    "id" UUID NOT NULL,
+    "id" SERIAL,
     "date" DATE NOT NULL,
     "startTime" TIMESTAMPTZ(6) NOT NULL,
     "endTime" TIMESTAMPTZ(6) NOT NULL,
@@ -67,30 +66,27 @@ CREATE TABLE "shift_requests" (
     "note" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "userId" UUID NOT NULL,
-    "shopId" UUID NOT NULL,
+    "userId" INTEGER NOT NULL,
+    "shopId" INTEGER NOT NULL,
 
     CONSTRAINT "shift_requests_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "final_shifts" (
-    "id" UUID NOT NULL,
+    "id" SERIAL,
     "date" DATE NOT NULL,
     "startTime" TIMESTAMPTZ(6) NOT NULL,
     "endTime" TIMESTAMPTZ(6) NOT NULL,
     "position" "Position" NOT NULL DEFAULT 'HALL',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "userId" UUID NOT NULL,
-    "shopId" UUID NOT NULL,
-    "createdById" UUID,
+    "userId" INTEGER NOT NULL,
+    "shopId" INTEGER NOT NULL,
+    "createdById" INTEGER,
 
     CONSTRAINT "final_shifts_pkey" PRIMARY KEY ("id")
 );
-
--- CreateIndex
-CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- CreateIndex
 CREATE INDEX "users_role_idx" ON "users"("role");
@@ -100,9 +96,6 @@ CREATE INDEX "users_employmentType_idx" ON "users"("employmentType");
 
 -- CreateIndex
 CREATE INDEX "users_primaryShopId_idx" ON "users"("primaryShopId");
-
--- CreateIndex
-CREATE INDEX "users_email_idx" ON "users"("email");
 
 -- CreateIndex
 CREATE INDEX "shops_name_idx" ON "shops"("name");

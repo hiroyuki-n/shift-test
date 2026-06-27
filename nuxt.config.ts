@@ -26,6 +26,12 @@ export default defineNuxtConfig({
     redirect: false,
   },
 
+  vite: {
+    optimizeDeps: {
+      include: ['@fullcalendar/vue3', '@fullcalendar/core', '@fullcalendar/timegrid'],
+    },
+  },
+
   typescript: {
     strict: true,
     typeCheck: false,

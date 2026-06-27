@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
 
   const { data: shop, error: shopError } = await client
     .from('shops')
-    .select('id, name, address, createdAt')
+    .select('id, name, createdAt')
     .eq('id', shopId)
     .maybeSingle()
 
@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
 
   const { data: staff, error: staffError } = await client
     .from('users')
-    .select('id, name, email, employmentType, role')
+    .select('id, name, employmentType, role')
     .eq('primaryShopId', shopId)
     .order('employmentType', { ascending: true })
     .order('name', { ascending: true })

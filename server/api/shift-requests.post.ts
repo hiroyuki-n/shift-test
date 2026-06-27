@@ -46,7 +46,6 @@ export default defineEventHandler(async (event) => {
   const { data, error } = await client
     .from('shift_requests')
     .insert({
-      id: crypto.randomUUID(),
       date,
       startTime: new Date(`${date}T${startTime}:00`).toISOString(),
       endTime: new Date(`${date}T${endTime}:00`).toISOString(),
