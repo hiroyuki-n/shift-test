@@ -49,15 +49,13 @@ export default defineEventHandler(async (event) => {
 
   const { error: membershipError } = await client
     .from('shop_memberships')
-    .insert({
-      userId: data.id,
-      shopId: primaryShopId,
-      type: 'PRIMARY',
-    })
+    .insert({ userId: data.id, shopId: primaryShopId, type: 'PRIMARY' })
 
-  if (membershipError) {
-    throw createError({ statusCode: 500, statusMessage: membershipError.message })
-  }
+  if (membershipError) throw createError({ statusCode: 500, statusMessage: membershipError.message })
+
+  // 雇用形態に応じた設定テーブルに初期レコードを作成
+  const settingsTable = employmentType === 'FULL_TIME' ? 'full_time_settings' : 'part_time_settings'
+  await client.from(settingsTable).insert({ userid: data.id })
 
   return data
 })

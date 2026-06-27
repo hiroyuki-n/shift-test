@@ -20,6 +20,13 @@ interface FinalShift {
 const { data: me } = await useFetch<CurrentUser | null>('/api/auth/me')
 const userId = computed(() => me.value?.id ?? '')
 
+// --- 所属店舗名 ---
+const { data: shopData } = await useFetch<{ shop: { name: string } } | null>(
+  () => me.value?.primaryShopId ? `/api/shops/${me.value.primaryShopId}` : null,
+  { default: () => null },
+)
+const shopName = computed(() => shopData.value?.shop?.name ?? '')
+
 // --- 月管理 ---
 const today = new Date()
 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -45,19 +52,26 @@ const { data: myRequests, refresh: refreshRequests } = await useFetch<ShiftReque
   '/api/shift-requests',
   { query: { userId, month: currentMonth }, default: () => [] },
 )
-const { data: myFinalShifts } = await useFetch<FinalShift[]>(
+const { data: myFinalShifts, refresh: refreshFinalShifts } = await useFetch<FinalShift[]>(
   '/api/final-shifts',
   { query: { userId, month: currentMonth }, default: () => [] },
 )
 
-// --- 日別ステータスマップ ---
-// staff 側では approved は pending と同じ「申請中」として扱う
-const dayStatusMap = computed(() => {
-  const map = new Map<string, DayStatus>()
-  for (const f of myFinalShifts.value) map.set(f.date, 'confirmed')
+// --- 日別ステータス＋時間マップ ---
+interface DayInfo { status: DayStatus; startTime: string; endTime: string }
+
+const dayInfoMap = computed(() => {
+  const map = new Map<string, DayInfo>()
+  for (const f of myFinalShifts.value) {
+    map.set(f.date, { status: 'confirmed', startTime: f.startTime, endTime: f.endTime })
+  }
   for (const r of myRequests.value) {
     if (!map.has(r.date)) {
-      map.set(r.date, r.status === 'REJECTED' ? 'rejected' : 'pending')
+      map.set(r.date, {
+        status: r.status === 'REJECTED' ? 'rejected' : 'pending',
+        startTime: r.startTime,
+        endTime:   r.endTime,
+      })
     }
   }
   return map
@@ -70,11 +84,11 @@ const calendarCells = computed(() => {
   const firstDay = new Date(y, m - 1, 1)
   const lastDate = new Date(y, m, 0).getDate()
   const startOffset = (firstDay.getDay() + 6) % 7
-  const cells: Array<{ day: number; dateStr: string; status: DayStatus | null; isToday: boolean } | null> = []
+  const cells: Array<{ day: number; dateStr: string; info: DayInfo | null; isToday: boolean } | null> = []
   for (let i = 0; i < startOffset; i++) cells.push(null)
   for (let d = 1; d <= lastDate; d++) {
     const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    cells.push({ day: d, dateStr, status: dayStatusMap.value.get(dateStr) ?? null, isToday: dateStr === todayStr })
+    cells.push({ day: d, dateStr, info: dayInfoMap.value.get(dateStr) ?? null, isToday: dateStr === todayStr })
   }
   return cells
 })
@@ -174,6 +188,33 @@ async function logout() {
   await $fetch('/api/auth/logout', { method: 'POST' })
   await navigateTo('/')
 }
+
+// --- Supabase Realtime：カレンダーの即時反映 ---
+const supabase = useSupabaseClient()
+
+onMounted(() => {
+  if (!userId.value) return
+
+  const channel = supabase
+    .channel(`staff-shifts-${userId.value}`)
+    // 確定シフト 作成 → カレンダーに「確定」を即時反映
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'final_shifts' },
+      async () => { await refreshFinalShifts() },
+    )
+    // 確定シフト 削除 → カレンダーから「確定」を即時除去
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'final_shifts' },
+      async () => { await refreshFinalShifts() },
+    )
+    // 希望シフトのステータス変更 → 申請中/却下をカレンダーに即時反映
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shift_requests' },
+      async () => { await refreshRequests() },
+    )
+    .subscribe()
+
+  onUnmounted(() => {
+    supabase.removeChannel(channel)
+  })
+})
 </script>
 
 <template>
@@ -194,6 +235,7 @@ async function logout() {
             <p class="mt-0.5 text-sm text-slate-500">
               {{ me.name }} さん ／
               <span class="font-medium">{{ me.employmentType === 'FULL_TIME' ? '社員' : 'アルバイト' }}</span>
+              <template v-if="shopName"> ／ {{ shopName }}</template>
             </p>
           </div>
           <button
@@ -233,87 +275,37 @@ async function logout() {
               >{{ label }}</div>
             </div>
             <div class="grid grid-cols-7 gap-1">
-              <div v-for="(cell, i) in calendarCells" :key="i" class="aspect-square">
+              <div v-for="(cell, i) in calendarCells" :key="i">
                 <!-- 空白セル -->
-                <div v-if="!cell" />
+                <div v-if="!cell" class="h-14" />
                 <!-- 日付セル -->
                 <button
                   v-else
-                  class="flex h-full w-full flex-col items-center justify-center rounded-lg text-sm font-medium transition"
+                  class="flex h-14 w-full flex-col items-center justify-center rounded-lg px-0.5 text-xs font-medium transition"
                   :class="[
                     cell.isToday ? 'ring-2 ring-brand ring-offset-1' : '',
-                    cell.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700'
-                    : cell.status === 'pending'  ? 'bg-amber-50 text-amber-700'
-                    : cell.status === 'rejected' ? 'bg-rose-50 text-rose-700'
-                    : 'text-slate-700 hover:bg-slate-100'
+                    cell.info?.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700'
+                    : cell.info?.status === 'pending'  ? 'bg-amber-50 text-amber-700'
+                    : cell.info?.status === 'rejected' ? 'bg-rose-50 text-rose-700'
+                    : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
                   ]"
                   @click="openModal(cell.dateStr)"
                 >
-                  <span>{{ cell.day }}</span>
-                  <span
-                    v-if="cell.status"
-                    class="mt-0.5 h-1.5 w-1.5 rounded-full"
-                    :class="STATUS_CONFIG[cell.status]?.dot"
-                  />
+                  <span class="text-sm font-semibold leading-none">{{ cell.day }}</span>
+                  <template v-if="cell.info">
+                    <span class="mt-0.5 leading-none opacity-80" style="font-size:9px">
+                      {{ formatTime(cell.info.startTime) }}
+                    </span>
+                    <span class="leading-none opacity-80" style="font-size:9px">
+                      〜{{ formatTime(cell.info.endTime) }}
+                    </span>
+                  </template>
                 </button>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- リスト: 希望シフト + 確定シフト -->
-        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-
-          <!-- 提出済み希望シフト -->
-          <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-700">
-              希望シフト（{{ monthLabel }}）
-            </h2>
-            <ul class="divide-y divide-slate-100">
-              <li
-                v-for="req in myRequests" :key="req.id"
-                class="flex items-center justify-between px-5 py-3 text-sm"
-              >
-                <div>
-                  <p class="font-medium text-slate-800">{{ req.date }}</p>
-                  <p class="text-slate-500">{{ formatTime(req.startTime) }}〜{{ formatTime(req.endTime) }}</p>
-                </div>
-                <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="requestStatusCfg(req.status).badge">
-                  {{ requestStatusCfg(req.status).label }}
-                </span>
-              </li>
-              <li v-if="myRequests.length === 0" class="px-5 py-8 text-center text-sm text-slate-400">
-                この月の提出はありません
-              </li>
-            </ul>
-          </section>
-
-          <!-- 確定シフト -->
-          <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <h2 class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-700">
-              確定シフト（{{ monthLabel }}）
-            </h2>
-            <ul class="divide-y divide-slate-100">
-              <li
-                v-for="shift in myFinalShifts" :key="shift.id"
-                class="flex items-center justify-between px-5 py-3 text-sm"
-              >
-                <div>
-                  <p class="font-medium text-slate-800">{{ shift.date }}</p>
-                  <p class="text-slate-500">{{ formatTime(shift.startTime) }}〜{{ formatTime(shift.endTime) }}</p>
-                  <p class="text-xs text-slate-400">{{ shift.shops?.name }}</p>
-                </div>
-                <span class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                  {{ positionLabel[shift.position] ?? shift.position }}
-                </span>
-              </li>
-              <li v-if="myFinalShifts.length === 0" class="px-5 py-8 text-center text-sm text-slate-400">
-                この月の確定シフトはありません
-              </li>
-            </ul>
-          </section>
-
-        </div>
       </template>
     </div>
 

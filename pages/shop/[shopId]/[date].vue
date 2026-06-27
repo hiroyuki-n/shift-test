@@ -77,17 +77,6 @@ function closePopup() {
 
 const pendingCount = computed(() => requests.value.filter(r => r.status === 'PENDING').length)
 
-// 確定・希望シフトを統合して開始時刻順に並べる（安定ソート）
-const unifiedList = computed(() => {
-  const confirmed = shifts.value.map(s => ({ kind: 'final'   as const, data: s }))
-  const requested = requests.value.map(r => ({ kind: 'request' as const, data: r }))
-  return [...confirmed, ...requested].sort((a, b) => {
-    const timeDiff = a.data.startTime.localeCompare(b.data.startTime)
-    if (timeDiff !== 0) return timeDiff
-    // 開始時刻が同じ場合は userId で安定させる
-    return (a.data.userId ?? 0) - (b.data.userId ?? 0)
-  })
-})
 
 // タイムライン再マウント制御
 const timelineMounted = ref(true)
@@ -238,7 +227,7 @@ const dateLabel = computed(() =>
             <ShiftTimeline
               v-if="timelineMounted"
               :shifts="shifts"
-              :requests="requests"
+              :requests="isConfirmed ? [] : requests"
               :date="date"
               @request-click="onCalendarRequestClick"
             />
@@ -251,49 +240,43 @@ const dateLabel = computed(() =>
           </ClientOnly>
         </section>
 
-        <!-- 右：シフト一覧（確定 + 希望） -->
+        <!-- 右：希望シフト一覧 -->
         <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div class="border-b border-slate-100 px-5 py-4">
-            <h2 class="text-sm font-semibold text-slate-700">シフト一覧</h2>
+            <h2 class="text-sm font-semibold text-slate-700">希望シフト</h2>
           </div>
 
-          <div v-if="unifiedList.length === 0" class="px-5 py-10 text-center text-sm text-slate-400">
-            この日のシフトはありません
+          <div v-if="requests.length === 0" class="px-5 py-10 text-center text-sm text-slate-400">
+            この日の希望はありません
           </div>
 
           <ul v-else class="divide-y divide-slate-100">
             <li
-              v-for="item in unifiedList"
-              :key="`${item.kind}-${item.data.id}`"
+              v-for="req in [...requests].sort((a, b) => a.startTime.localeCompare(b.startTime))"
+              :key="req.id"
               class="flex items-center gap-2 px-5 py-2.5"
             >
-              <!-- 時間 -->
               <span class="shrink-0 text-xs text-slate-500">
-                {{ formatTime(item.data.startTime) }}〜{{ formatTime(item.data.endTime) }}
+                {{ formatTime(req.startTime) }}〜{{ formatTime(req.endTime) }}
               </span>
-
-              <!-- 氏名 -->
               <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                {{ item.data.users?.name ?? '—' }}
+                {{ req.users?.name ?? '—' }}
               </span>
-
-              <!-- 確定シフト -->
-              <template v-if="item.kind === 'final'">
-                <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">確定</span>
-              </template>
-
-              <!-- 希望シフト：ステータスボタン -->
-              <template v-else>
-                <div class="flex shrink-0 gap-1">
-                  <button
-                    v-for="(cfg, key) in STATUS_CONFIG" :key="key"
-                    class="rounded-full px-2 py-0.5 text-xs font-semibold transition"
-                    :class="item.data.status === key ? cfg.badge : 'bg-slate-100 text-slate-300 hover:text-slate-500'"
-                    :disabled="updatingId === item.data.id"
-                    @click="updateStatus(item.data.id, key as ShiftStatus)"
-                  >{{ cfg.label }}</button>
-                </div>
-              </template>
+              <span
+                class="shrink-0 text-xs font-medium"
+                :class="req.users?.employmentType === 'FULL_TIME'
+                  ? 'text-indigo-500'
+                  : 'text-slate-400'"
+              >[{{ req.users?.employmentType === 'FULL_TIME' ? '社員' : 'バイト' }}]</span>
+              <div class="flex shrink-0 gap-1">
+                <button
+                  v-for="(cfg, key) in STATUS_CONFIG" :key="key"
+                  class="rounded-full px-2 py-0.5 text-xs font-semibold transition"
+                  :class="req.status === key ? cfg.badge : 'bg-slate-100 text-slate-300 hover:text-slate-500'"
+                  :disabled="updatingId === req.id"
+                  @click="updateStatus(req.id, key as ShiftStatus)"
+                >{{ cfg.label }}</button>
+              </div>
             </li>
           </ul>
         </section>

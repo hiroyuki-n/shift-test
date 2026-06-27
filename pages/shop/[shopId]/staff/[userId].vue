@@ -14,6 +14,8 @@ interface StaffInfo {
   primaryShopId: number | null
   createdAt: string
   updatedAt: string
+  full_time_settings: { workpattern: string | null } | null
+  part_time_settings: { hourlywage: number | null } | null
 }
 
 interface ShiftRequest {
@@ -181,6 +183,29 @@ const workDays = computed(() => new Set(finalShifts.value.map(s => s.date)).size
           <dt class="text-xs text-slate-400">最終更新</dt>
           <dd class="mt-1 text-sm text-slate-800">{{ staff?.updatedAt ? formatDate(staff.updatedAt) : '—' }}</dd>
         </div>
+      </dl>
+    </section>
+
+    <!-- 雇用形態別設定（表示のみ） -->
+    <section class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-6 py-3">
+        <h2 class="text-sm font-semibold text-slate-700">
+          {{ staff?.employmentType === 'FULL_TIME' ? '社員設定' : 'アルバイト設定' }}
+        </h2>
+      </div>
+      <dl class="px-6 py-4">
+        <template v-if="staff?.employmentType === 'PART_TIME'">
+          <dt class="text-xs text-slate-400">時給</dt>
+          <dd class="mt-1 text-sm font-semibold text-slate-800">
+            {{ staff.part_time_settings?.hourlywage != null ? `${staff.part_time_settings.hourlywage} 円 / 時` : '未設定' }}
+          </dd>
+        </template>
+        <template v-else-if="staff?.employmentType === 'FULL_TIME'">
+          <dt class="text-xs text-slate-400">勤務パターン</dt>
+          <dd class="mt-1 text-sm font-semibold text-slate-800">
+            {{ staff.full_time_settings?.workpattern ?? '未設定' }}
+          </dd>
+        </template>
       </dl>
     </section>
 

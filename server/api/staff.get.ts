@@ -11,9 +11,9 @@ export default defineEventHandler(async (event) => {
 
   const { data, error } = await client
     .from('users')
-    .select('id, name, employmentType, role, primaryShopId')
+    .select('id, name, employmentType, role, primaryShopId, full_time_settings(workpattern), part_time_settings(hourlywage)')
     .eq('role', 'STAFF')
-    .order('name', { ascending: true })
+    .order('id', { ascending: true })
 
   if (error) {
     throw createError({ statusCode: 500, statusMessage: error.message })
