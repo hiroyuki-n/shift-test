@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
 
   let query = client
     .from('final_shifts')
-    .select('id, date, startTime, endTime, position, userId, shopId, hourlywage, users!final_shifts_userId_fkey(name, employmentType), shops(name)')
+    .select('id, date, startTime, endTime, positionId, userId, shopId, hourlywage, users!final_shifts_userId_fkey(name, employmentType), shops(name), shop_positions(name)')
     .order('date', { ascending: true })
     .order('startTime', { ascending: true })
 

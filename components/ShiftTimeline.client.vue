@@ -4,17 +4,18 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import jaLocale from '@fullcalendar/core/locales/ja'
 import type { EventInput, EventContentArg } from '@fullcalendar/core'
 
-type Position    = 'HALL' | 'KITCHEN' | 'CASHIER' | 'MANAGER' | 'OTHER'
 type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 interface Shift {
   id: number; startTime: string; endTime: string; date: string
-  position: Position
+  positionId: number | null
+  shop_positions: { name: string } | null
   users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
 }
 interface Request {
-  id: number; startTime: string; endTime: string
-  status: ShiftStatus; users: { name: string } | null
+  id: number; startTime: string; endTime: string; date: string
+  status: ShiftStatus
+  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
 }
 
 const props = defineProps<{ shifts: Shift[]; requests?: Request[]; date: string }>()
@@ -23,17 +24,8 @@ const emit = defineEmits<{
   requestClick: [id: number, status: ShiftStatus]
 }>()
 
-// --- 色設定 ---
-const positionLabel: Record<Position, string> = {
-  HALL: 'ホール', KITCHEN: 'キッチン', CASHIER: 'レジ', MANAGER: '管理', OTHER: 'その他',
-}
-const positionColors: Record<Position, { bg: string; border: string; text: string }> = {
-  HALL:    { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },
-  KITCHEN: { bg: '#ffedd5', border: '#f97316', text: '#9a3412' },
-  CASHIER: { bg: '#dcfce7', border: '#22c55e', text: '#166534' },
-  MANAGER: { bg: '#f3e8ff', border: '#a855f7', text: '#6b21a8' },
-  OTHER:   { bg: '#f1f5f9', border: '#94a3b8', text: '#475569' },
-}
+// --- 色設定（確定シフト：単一色） ---
+const confirmedColor = { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' }
 const requestColors: Record<ShiftStatus, { bg: string; border: string; text: string; dashed: boolean } | null> = {
   PENDING:  { bg: '#f1f5f9', border: '#94a3b8', text: '#64748b', dashed: true  },
   APPROVED: { bg: '#dbeafe', border: '#6366f1', text: '#3730a3', dashed: false },
@@ -66,10 +58,10 @@ function buildEvents(): EventInput[] {
         title:           s.users?.name ?? '—',
         start:           s.startTime,
         end:             s.endTime,
-        backgroundColor: positionColors[s.position].bg,
-        borderColor:     positionColors[s.position].border,
-        textColor:       positionColors[s.position].text,
-        extendedProps:   { type: 'final', label: positionLabel[s.position] },
+        backgroundColor: confirmedColor.bg,
+        borderColor:     confirmedColor.border,
+        textColor:       confirmedColor.text,
+        extendedProps:   { type: 'final', label: s.shop_positions?.name ?? '' },
       })
     }
   }
@@ -77,16 +69,33 @@ function buildEvents(): EventInput[] {
   for (const r of (props.requests ?? [])) {
     const c = requestColors[r.status]
     if (!c) continue
-    events.push({
-      id:              `req-${r.id}`,
-      title:           r.users?.name ?? '—',
-      start:           r.startTime,
-      end:             r.endTime,
-      backgroundColor: c.bg,
-      borderColor:     c.border,
-      textColor:       c.text,
-      extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed },
-    })
+    const isFullTime = r.users?.employmentType === 'FULL_TIME'
+
+    if (isFullTime) {
+      // 社員リクエスト → 終日行
+      events.push({
+        id:              `req-${r.id}`,
+        title:           r.users?.name ?? '—',
+        start:           r.date,
+        allDay:          true,
+        backgroundColor: c.bg,
+        borderColor:     c.border,
+        textColor:       c.text,
+        extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed },
+      })
+    } else {
+      // アルバイトリクエスト → 時間ブロック
+      events.push({
+        id:              `req-${r.id}`,
+        title:           r.users?.name ?? '—',
+        start:           r.startTime,
+        end:             r.endTime,
+        backgroundColor: c.bg,
+        borderColor:     c.border,
+        textColor:       c.text,
+        extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed },
+      })
+    }
   }
 
   return events

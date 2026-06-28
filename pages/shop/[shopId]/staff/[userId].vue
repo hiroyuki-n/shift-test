@@ -3,7 +3,6 @@ definePageMeta({ layout: 'shop' })
 
 type ShiftStatus    = 'PENDING' | 'APPROVED' | 'REJECTED'
 type EmploymentType = 'PART_TIME' | 'FULL_TIME'
-type Position       = 'HALL' | 'KITCHEN' | 'CASHIER' | 'MANAGER' | 'OTHER'
 
 interface StaffInfo {
   id: number
@@ -33,9 +32,10 @@ interface FinalShift {
   date: string
   startTime: string
   endTime: string
-  position: Position
+  positionId: number | null
   shopId: number
   shops: { name: string } | null
+  shop_positions: { name: string } | null
 }
 
 const route  = useRoute()
@@ -96,9 +96,6 @@ const STATUS_CONFIG: Record<ShiftStatus, { label: string; badge: string }> = {
   REJECTED: { label: '外す',   badge: 'bg-rose-100 text-rose-700' },
 }
 
-const positionLabel: Record<Position, string> = {
-  HALL: 'ホール', KITCHEN: 'キッチン', CASHIER: 'レジ', MANAGER: '管理', OTHER: 'その他',
-}
 
 function formatTime(iso: string): string {
   const d   = new Date(iso)
@@ -279,7 +276,7 @@ const workDays = computed(() => new Set(finalShifts.value.map(s => s.date)).size
               <p class="text-xs text-slate-500">{{ formatTime(shift.startTime) }}〜{{ formatTime(shift.endTime) }}</p>
             </div>
             <span class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-              {{ positionLabel[shift.position] }}
+              {{ shift.shop_positions?.name ?? '—' }}
             </span>
           </li>
           <li v-if="finalShifts.length === 0" class="px-5 py-8 text-center text-sm text-slate-400">

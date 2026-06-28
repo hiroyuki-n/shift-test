@@ -20,13 +20,13 @@ const navItems = computed(() => [
     active: route.path === `/shop/${shopId.value}/dashboard`,
   },
   {
-    label: 'シフトカレンダー',
+    label: 'シフト',
     to: `/shop/${shopId.value}`,
     icon: CalendarDaysIcon,
     active: route.path === `/shop/${shopId.value}` || datePattern.test(route.path),
   },
   {
-    label: 'スタッフ一覧',
+    label: 'スタッフ',
     to: `/shop/${shopId.value}/staff`,
     icon: UsersIcon,
     active: route.path.startsWith(`/shop/${shopId.value}/staff`),

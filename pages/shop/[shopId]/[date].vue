@@ -1,107 +1,132 @@
 <script setup lang="ts">
-import { CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/vue/24/outline'
+import { CheckCircleIcon, ExclamationCircleIcon } from "@heroicons/vue/24/outline";
 
-
-type Position    = 'HALL' | 'KITCHEN' | 'CASHIER' | 'MANAGER' | 'OTHER'
 type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 interface FinalShift {
-  id: number; date: string; startTime: string; endTime: string
-  position: Position; userId: number; shopId: number
+  id: number
+  date: string
+  startTime: string
+  endTime: string
+  positionId: number | null
+  userId: number
+  shopId: number
   users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
+  shop_positions: { name: string } | null
 }
 
 interface ShiftRequest {
-  id: number; date: string; startTime: string; endTime: string
-  status: ShiftStatus; note: string | null; userId: number; shopId: number
-  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
+  id: number;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: ShiftStatus;
+  note: string | null;
+  userId: number;
+  shopId: number;
+  users: { name: string; employmentType: "PART_TIME" | "FULL_TIME" | null } | null;
 }
 
 interface ShopDetail {
-  shop: { id: number; name: string }
+  shop: { id: number; name: string };
 }
 
 definePageMeta({
-  layout: 'shop',
-  validate: route => /^\d{4}-\d{2}-\d{2}$/.test(String(route.params.date)),
-})
+  layout: "shop",
+  validate: (route) => /^\d{4}-\d{2}-\d{2}$/.test(String(route.params.date)),
+});
 
-const route  = useRoute()
-const shopId = route.params.shopId as string
-const date   = route.params.date   as string
+const route = useRoute();
+const shopId = route.params.shopId as string;
+const date = route.params.date as string;
 
 const { data: shopData } = await useFetch<ShopDetail>(`/api/shops/${shopId}`)
 
-const { data: shifts, refresh: refreshShifts } = await useFetch<FinalShift[]>('/api/final-shifts', {
-  query: { shopId, date },
-  default: () => [],
-})
+// --- ポジション ---
+interface ShopPosition { id: number; name: string }
+const { data: shopPositions } = await useFetch<ShopPosition[]>(
+  `/api/shops/${shopId}/positions`,
+  { default: () => [] },
+)
+// リクエストごとの選択ポジション（requestId → positionId）
+const positionMap = ref<Record<number, number>>({})
 
-const { data: requests, refresh: refreshRequests } = await useFetch<ShiftRequest[]>('/api/shift-requests', {
+const { data: shifts, refresh: refreshShifts } = await useFetch<FinalShift[]>("/api/final-shifts", {
   query: { shopId, date },
   default: () => [],
-})
+});
+
+const { data: requests, refresh: refreshRequests } = await useFetch<ShiftRequest[]>("/api/shift-requests", {
+  query: { shopId, date },
+  default: () => [],
+});
+
+// ポジションのデフォルト選択（requests と shopPositions が揃ってから実行）
+watch(
+  [requests, shopPositions],
+  () => {
+    const defaultId = shopPositions.value[0]?.id
+    if (!defaultId) return
+    requests.value.forEach(r => {
+      if (!positionMap.value[r.id]) positionMap.value[r.id] = defaultId
+    })
+  },
+  { immediate: true },
+)
 
 // --- 承認 / 却下 ---
 const STATUS_CONFIG: Record<ShiftStatus, { label: string; badge: string }> = {
-  PENDING:  { label: '保留',   badge: 'bg-amber-100 text-amber-700' },
-  APPROVED: { label: '入れる', badge: 'bg-emerald-100 text-emerald-700' },
-  REJECTED: { label: '外す',   badge: 'bg-rose-100 text-rose-700' },
-}
+  PENDING: { label: "保留", badge: "bg-amber-100 text-amber-700" },
+  APPROVED: { label: "入れる", badge: "bg-emerald-100 text-emerald-700" },
+  REJECTED: { label: "外す", badge: "bg-rose-100 text-rose-700" },
+};
 
-const updatingId = ref<number | null>(null)
+const updatingId = ref<number | null>(null);
 
 async function updateStatus(id: number, status: ShiftStatus) {
-  updatingId.value = id
+  updatingId.value = id;
   try {
-    await $fetch(`/api/shift-requests/${id}`, { method: 'PATCH', body: { status } })
-    timelineMounted.value = false          // アンマウント
-    await refreshRequests()               // 最新データ取得
-    await nextTick()                      // Vue の反映を待つ
-    timelineMounted.value = true          // 最新データで再マウント
+    await $fetch(`/api/shift-requests/${id}`, { method: "PATCH", body: { status } });
+    timelineMounted.value = false; // アンマウント
+    await refreshRequests(); // 最新データ取得
+    await nextTick(); // Vue の反映を待つ
+    timelineMounted.value = true; // 最新データで再マウント
   } finally {
-    updatingId.value = null
-    popupRequest.value = null
+    updatingId.value = null;
+    popupRequest.value = null;
   }
 }
 
 // --- カレンダークリック時のポップアップ ---
-const popupRequest = ref<ShiftRequest | null>(null)
+const popupRequest = ref<ShiftRequest | null>(null);
 
 function onCalendarRequestClick(id: number) {
-  popupRequest.value = requests.value.find(r => r.id === id) ?? null
+  popupRequest.value = requests.value.find((r) => r.id === id) ?? null;
 }
 function closePopup() {
-  popupRequest.value = null
+  popupRequest.value = null;
 }
 
-const pendingCount = computed(() => requests.value.filter(r => r.status === 'PENDING').length)
-
+const pendingCount = computed(() => requests.value.filter((r) => r.status === "PENDING").length);
 
 // タイムライン再マウント制御
-const timelineMounted = ref(true)
+const timelineMounted = ref(true);
 
 // APPROVED(入れる) かつ final_shift なし → 確定対象
-const unconfirmedRequests = computed(() =>
-  requests.value.filter(r =>
-    r.status === 'APPROVED' && !shifts.value.some(s => s.userId === r.userId),
-  ),
-)
+const unconfirmedRequests = computed(() => requests.value.filter((r) => r.status === "APPROVED" && !shifts.value.some((s) => s.userId === r.userId)));
 
 // 保留が残っているか
-const pendingBlockCount = computed(() =>
-  requests.value.filter(r =>
-    r.status === 'PENDING' && !shifts.value.some(s => s.userId === r.userId),
-  ).length,
-)
+const pendingBlockCount = computed(() => requests.value.filter((r) => r.status === "PENDING" && !shifts.value.some((s) => s.userId === r.userId)).length);
 
 // 確定済みか（final_shift が存在する）
-const isConfirmed = computed(() => shifts.value.length > 0)
+const isConfirmed = computed(() => shifts.value.length > 0);
 
 // --- 確定 ---
-const confirming = ref(false)
+const confirming     = ref(false)
+const confirmError   = ref('')
 
 async function confirmShifts() {
+  confirmError.value = ''
   if (unconfirmedRequests.value.length === 0 || pendingBlockCount.value > 0) return
   confirming.value = true
   try {
@@ -110,11 +135,11 @@ async function confirmShifts() {
         $fetch('/api/final-shifts', {
           method: 'POST',
           body: {
-            date:      r.date,
-            startTime: r.startTime,
-            endTime:   r.endTime,
-            position:  'HALL',
-            userId:    r.userId,
+            date:       r.date,
+            startTime:  r.startTime,
+            endTime:    r.endTime,
+            positionId: positionMap.value[r.id] ?? shopPositions.value[0]?.id ?? null,
+            userId:     r.userId,
             shopId,
           },
         }),
@@ -124,60 +149,57 @@ async function confirmShifts() {
     await refreshShifts()
     await nextTick()
     timelineMounted.value = true
+  } catch (e: unknown) {
+    confirmError.value = (e as { statusMessage?: string })?.statusMessage ?? '確定に失敗しました'
   } finally {
     confirming.value = false
   }
 }
 
 // --- 未確定に戻す ---
-const undoing = ref(false)
+const undoing = ref(false);
 
 async function undoConfirmation() {
-  if (!shifts.value.length) return
-  undoing.value = true
+  if (!shifts.value.length) return;
+  undoing.value = true;
   try {
-    await Promise.all(
-      shifts.value.map(s => $fetch(`/api/final-shifts/${s.id}`, { method: 'DELETE' })),
-    )
-    timelineMounted.value = false
-    await refreshShifts()
-    await nextTick()
-    timelineMounted.value = true
+    await Promise.all(shifts.value.map((s) => $fetch(`/api/final-shifts/${s.id}`, { method: "DELETE" })));
+    timelineMounted.value = false;
+    await refreshShifts();
+    await nextTick();
+    timelineMounted.value = true;
   } finally {
-    undoing.value = false
+    undoing.value = false;
   }
 }
 
-
 function formatTime(iso: string): string {
-  const d   = new Date(iso)
-  const min = (d.getUTCHours() * 60 + d.getUTCMinutes() + 540) % 1440
-  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+  const d = new Date(iso);
+  const min = (d.getUTCHours() * 60 + d.getUTCMinutes() + 540) % 1440;
+  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 }
 
 const dateLabel = computed(() =>
-  new Date(`${date}T12:00:00+09:00`).toLocaleDateString('ja-JP', {
-    year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
+  new Date(`${date}T12:00:00+09:00`).toLocaleDateString("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
   }),
-)
+);
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl p-8">
-
     <!-- ヘッダー -->
     <header class="mb-6">
       <h1 class="mb-1 text-2xl font-bold text-slate-800">{{ dateLabel }}</h1>
-      <p class="mb-4 text-sm text-slate-500">{{ shopData?.shop?.name }}</p>
+      <p v-if="confirmError" class="mb-3 rounded-lg bg-rose-50 px-4 py-2 text-sm text-rose-600">{{ confirmError }}</p>
 
       <!-- 確定・アクションボタン（横並び） -->
       <div class="flex gap-3">
-
         <!-- 左：確定人数（情報表示） -->
-        <div
-          class="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
-          :class="isConfirmed ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'"
-        >
+        <div class="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold" :class="isConfirmed ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'">
           <CheckCircleIcon class="h-5 w-5" />
           <span>確定</span>
           <span class="text-base font-bold">{{ shifts.length }}</span>
@@ -186,88 +208,92 @@ const dateLabel = computed(() =>
 
         <!-- 右：確定済み → 未確定に戻す / 未確定 → 確定する -->
         <template v-if="isConfirmed">
-          <button
-            class="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition"
-            :class="undoing ? 'bg-slate-100 text-slate-400' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'"
-            :disabled="undoing"
-            @click="undoConfirmation"
-          >
+          <button class="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition" :class="undoing ? 'bg-slate-100 text-slate-400' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'" :disabled="undoing" @click="undoConfirmation">
             <ExclamationCircleIcon class="h-5 w-5" />
-            {{ undoing ? '解除中…' : '未確定に戻す' }}
+            {{ undoing ? "解除中…" : "未確定に戻す" }}
           </button>
         </template>
         <template v-else>
           <button
             class="flex flex-1 flex-col items-center justify-center rounded-xl py-3 text-sm font-semibold transition"
-            :class="unconfirmedRequests.length > 0 && pendingBlockCount === 0 && !confirming
-              ? 'bg-emerald-500 text-white hover:bg-emerald-600 cursor-pointer'
-              : 'bg-slate-100 text-slate-400 cursor-default'"
+            :class="unconfirmedRequests.length > 0 && pendingBlockCount === 0 && !confirming ? 'bg-emerald-500 text-white hover:bg-emerald-600 cursor-pointer' : 'bg-slate-100 text-slate-400 cursor-default'"
             :disabled="unconfirmedRequests.length === 0 || pendingBlockCount > 0 || confirming"
             @click="confirmShifts"
           >
             <div class="flex items-center gap-2">
               <CheckCircleIcon class="h-5 w-5" />
-              <span>{{ confirming ? '確定中…' : '確定する' }}</span>
+              <span>{{ confirming ? "確定中…" : "確定する" }}</span>
             </div>
-            <span v-if="pendingBlockCount > 0" class="mt-0.5 text-xs font-normal opacity-80">
-              保留 {{ pendingBlockCount }}件を先に処理してください
-            </span>
+            <span v-if="pendingBlockCount > 0" class="mt-0.5 text-xs font-normal opacity-80"> 保留 {{ pendingBlockCount }}件を先に処理してください </span>
           </button>
         </template>
-
       </div>
     </header>
 
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <!-- 左：タイムライン -->
+      <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 class="mb-3 text-sm font-semibold text-slate-700">タイムライン</h2>
+        <ClientOnly>
+          <ShiftTimeline v-if="timelineMounted" :shifts="shifts" :requests="isConfirmed ? [] : requests" :date="date" @request-click="onCalendarRequestClick" />
+          <div v-else class="flex h-64 items-center justify-center text-sm text-slate-400">更新中…</div>
+          <template #fallback>
+            <div class="py-16 text-center text-sm text-slate-400">読み込み中…</div>
+          </template>
+        </ClientOnly>
+      </section>
 
-        <!-- 左：タイムライン -->
-        <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 class="mb-3 text-sm font-semibold text-slate-700">タイムライン</h2>
-          <ClientOnly>
-            <ShiftTimeline
-              v-if="timelineMounted"
-              :shifts="shifts"
-              :requests="isConfirmed ? [] : requests"
-              :date="date"
-              @request-click="onCalendarRequestClick"
-            />
-            <div v-else class="flex h-64 items-center justify-center text-sm text-slate-400">
-              更新中…
+      <!-- 右：確定済みは確定一覧 / 未確定は申請一覧 -->
+      <div class="space-y-4">
+
+        <!-- 確定済み一覧 -->
+        <template v-if="isConfirmed">
+          <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="border-b border-slate-100 px-5 py-3">
+              <h2 class="text-sm font-semibold text-slate-700">確定シフト <span class="ml-1.5 font-normal text-slate-400">{{ shifts.length }}人</span></h2>
             </div>
-            <template #fallback>
-              <div class="py-16 text-center text-sm text-slate-400">読み込み中…</div>
-            </template>
-          </ClientOnly>
-        </section>
+            <ul class="divide-y divide-slate-100">
+              <li
+                v-for="s in [...shifts].sort((a, b) => a.startTime.localeCompare(b.startTime))"
+                :key="s.id"
+                class="flex items-center gap-2 px-5 py-2.5"
+              >
+                <span v-if="s.users?.employmentType !== 'FULL_TIME'" class="shrink-0 text-xs text-slate-500">
+                  {{ formatTime(s.startTime) }}〜{{ formatTime(s.endTime) }}
+                </span>
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ s.users?.name ?? '—' }}</span>
+                <span
+                  class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
+                  :class="s.users?.employmentType === 'FULL_TIME' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'"
+                >{{ s.users?.employmentType === 'FULL_TIME' ? '終日' : (s.shop_positions?.name ?? '—') }}</span>
+              </li>
+            </ul>
+          </section>
+        </template>
 
-        <!-- 右：希望シフト一覧 -->
+        <!-- 申請一覧（未確定時のみ） -->
+        <template v-else>
+        <!-- 社員 -->
         <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div class="border-b border-slate-100 px-5 py-4">
-            <h2 class="text-sm font-semibold text-slate-700">希望シフト</h2>
+          <div class="border-b border-slate-100 px-5 py-3">
+            <h2 class="text-sm font-semibold text-slate-700">
+              社員
+              <span class="ml-1.5 font-normal text-slate-400">{{ requests.filter((r) => r.users?.employmentType === "FULL_TIME").length }}人</span>
+            </h2>
           </div>
-
-          <div v-if="requests.length === 0" class="px-5 py-10 text-center text-sm text-slate-400">
-            この日の希望はありません
-          </div>
-
-          <ul v-else class="divide-y divide-slate-100">
+          <ul class="divide-y divide-slate-100">
             <li
-              v-for="req in [...requests].sort((a, b) => a.startTime.localeCompare(b.startTime))"
+              v-for="req in [...requests].filter(r => r.users?.employmentType === 'FULL_TIME').sort((a, b) => (a.users?.name ?? '').localeCompare(b.users?.name ?? ''))"
               :key="req.id"
               class="flex items-center gap-2 px-5 py-2.5"
             >
-              <span class="shrink-0 text-xs text-slate-500">
-                {{ formatTime(req.startTime) }}〜{{ formatTime(req.endTime) }}
-              </span>
-              <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                {{ req.users?.name ?? '—' }}
-              </span>
-              <span
-                class="shrink-0 text-xs font-medium"
-                :class="req.users?.employmentType === 'FULL_TIME'
-                  ? 'text-indigo-500'
-                  : 'text-slate-400'"
-              >[{{ req.users?.employmentType === 'FULL_TIME' ? '社員' : 'バイト' }}]</span>
+              <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ req.users?.name ?? '—' }}</span>
+              <select
+                v-model="positionMap[req.id]"
+                class="rounded-lg border border-slate-300 px-2 py-1 text-xs focus:border-brand focus:outline-none"
+              >
+                <option v-for="p in shopPositions" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
               <div class="flex shrink-0 gap-1">
                 <button
                   v-for="(cfg, key) in STATUS_CONFIG" :key="key"
@@ -278,52 +304,76 @@ const dateLabel = computed(() =>
                 >{{ cfg.label }}</button>
               </div>
             </li>
+            <li v-if="!requests.some((r) => r.users?.employmentType === 'FULL_TIME')" class="px-5 py-4 text-center text-sm text-slate-400">社員の希望はありません</li>
           </ul>
         </section>
 
-      </div>
-
-
-
-
-      <!-- カレンダークリック ポップアップ -->
-      <Teleport to="body">
-        <div
-          v-if="popupRequest"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-          @click.self="closePopup"
-        >
-          <div class="w-full max-w-xs rounded-xl bg-white shadow-xl">
-            <div class="border-b border-slate-100 px-5 py-4">
-              <p class="font-semibold text-slate-800">{{ popupRequest.users?.name ?? '—' }}</p>
-              <p class="mt-0.5 text-sm text-slate-500">
-                {{ formatTime(popupRequest.startTime) }}〜{{ formatTime(popupRequest.endTime) }}
-              </p>
-              <span
-                class="mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                :class="STATUS_CONFIG[popupRequest.status].badge"
-              >{{ STATUS_CONFIG[popupRequest.status].label }}</span>
-            </div>
-            <div class="p-4">
-              <div class="mb-3 flex gap-2">
+        <!-- アルバイト -->
+        <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <h2 class="text-sm font-semibold text-slate-700">
+              アルバイト
+              <span class="ml-1.5 font-normal text-slate-400">{{ requests.filter((r) => r.users?.employmentType !== "FULL_TIME").length }}人</span>
+            </h2>
+          </div>
+          <ul class="divide-y divide-slate-100">
+            <li
+              v-for="req in [...requests].filter(r => r.users?.employmentType !== 'FULL_TIME').sort((a, b) => a.startTime.localeCompare(b.startTime))"
+              :key="req.id"
+              class="flex items-center gap-2 px-5 py-2.5"
+            >
+              <span class="shrink-0 text-xs text-slate-500">{{ formatTime(req.startTime) }}〜{{ formatTime(req.endTime) }}</span>
+              <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ req.users?.name ?? '—' }}</span>
+              <select
+                v-model="positionMap[req.id]"
+                class="rounded-lg border border-slate-300 px-2 py-1 text-xs focus:border-brand focus:outline-none"
+              >
+                <option v-for="p in shopPositions" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+              <div class="flex shrink-0 gap-1">
                 <button
                   v-for="(cfg, key) in STATUS_CONFIG" :key="key"
-                  class="flex-1 rounded-lg py-2 text-sm font-semibold transition disabled:opacity-50"
-                  :class="popupRequest.status === key
-                    ? cfg.badge + ' ring-2 ring-offset-1 ring-current'
-                    : 'bg-slate-100 text-slate-400 hover:text-slate-600'"
-                  :disabled="updatingId === popupRequest.id"
-                  @click="updateStatus(popupRequest.id, key as ShiftStatus)"
+                  class="rounded-full px-2 py-0.5 text-xs font-semibold transition"
+                  :class="req.status === key ? cfg.badge : 'bg-slate-100 text-slate-300 hover:text-slate-500'"
+                  :disabled="updatingId === req.id"
+                  @click="updateStatus(req.id, key as ShiftStatus)"
                 >{{ cfg.label }}</button>
               </div>
+            </li>
+            <li v-if="!requests.some((r) => r.users?.employmentType !== 'FULL_TIME')" class="px-5 py-4 text-center text-sm text-slate-400">アルバイトの希望はありません</li>
+          </ul>
+        </section>
+        </template>
+
+      </div>
+    </div>
+
+    <!-- カレンダークリック ポップアップ -->
+    <Teleport to="body">
+      <div v-if="popupRequest" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" @click.self="closePopup">
+        <div class="w-full max-w-xs rounded-xl bg-white shadow-xl">
+          <div class="border-b border-slate-100 px-5 py-4">
+            <p class="font-semibold text-slate-800">{{ popupRequest.users?.name ?? "—" }}</p>
+            <p class="mt-0.5 text-sm text-slate-500">{{ formatTime(popupRequest.startTime) }}〜{{ formatTime(popupRequest.endTime) }}</p>
+            <span class="mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="STATUS_CONFIG[popupRequest.status].badge">{{ STATUS_CONFIG[popupRequest.status].label }}</span>
+          </div>
+          <div class="p-4">
+            <div class="mb-3 flex gap-2">
               <button
-                class="w-full rounded-lg py-2 text-sm text-slate-400 hover:text-slate-600"
-                @click="closePopup"
-              >キャンセル</button>
+                v-for="(cfg, key) in STATUS_CONFIG"
+                :key="key"
+                class="flex-1 rounded-lg py-2 text-sm font-semibold transition disabled:opacity-50"
+                :class="popupRequest.status === key ? cfg.badge + ' ring-2 ring-offset-1 ring-current' : 'bg-slate-100 text-slate-400 hover:text-slate-600'"
+                :disabled="updatingId === popupRequest.id"
+                @click="updateStatus(popupRequest.id, key as ShiftStatus)"
+              >
+                {{ cfg.label }}
+              </button>
             </div>
+            <button class="w-full rounded-lg py-2 text-sm text-slate-400 hover:text-slate-600" @click="closePopup">キャンセル</button>
           </div>
         </div>
-      </Teleport>
-
+      </div>
+    </Teleport>
   </div>
 </template>

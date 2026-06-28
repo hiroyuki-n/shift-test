@@ -34,11 +34,12 @@ async function login() {
   submitting.value = true
   loginError.value = ''
   try {
-    await $fetch('/api/auth/login', {
+    const result = await $fetch<{ employmentType: string | null }>('/api/auth/login', {
       method: 'POST',
       body: { userId: userId.value, password: password.value },
     })
-    await navigateTo('/staff')
+    const dest = result.employmentType === 'FULL_TIME' ? '/full-time' : '/part-time'
+    await navigateTo(dest)
   } catch (e: unknown) {
     loginError.value =
       (e as { statusMessage?: string })?.statusMessage ||

@@ -3,23 +3,21 @@ import { serverSupabaseClient } from '#supabase/server'
 /**
  * 確定シフト 作成API
  * POST /api/final-shifts
- *   body: { date, startTime, endTime, position, userId, shopId }
- *
- * アルバイトの場合、確定時点の時給を hourlywage に記録する
+ *   body: { date, startTime, endTime, positionId, userId, shopId }
  */
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
-    date?: string
-    startTime?: string
-    endTime?: string
-    position?: string
-    userId?: number
-    shopId?: number | string
+    date?:       string
+    startTime?:  string
+    endTime?:    string
+    positionId?: number | null
+    userId?:     number
+    shopId?:     number | string
   }>(event)
 
-  const { date, startTime, endTime, position, userId, shopId } = body
+  const { date, startTime, endTime, positionId, userId, shopId } = body
 
-  if (!date || !startTime || !endTime || !position || !userId || !shopId) {
+  if (!date || !startTime || !endTime || !userId || !shopId) {
     throw createError({ statusCode: 400, statusMessage: '必須項目が不足しています' })
   }
 
@@ -32,21 +30,19 @@ export default defineEventHandler(async (event) => {
     .eq('userId', userId)
     .maybeSingle()
 
-  const hourlywage = settings?.hourlywage ?? null
-
   const { data, error } = await client
     .from('final_shifts')
     .insert({
       date,
       startTime,
       endTime,
-      position,
+      positionId: positionId ?? null,
       userId,
       shopId,
-      hourlywage,
-      updatedAt: new Date().toISOString(),
+      hourlywage: settings?.hourlywage ?? null,
+      updatedAt:  new Date().toISOString(),
     })
-    .select('id, date, startTime, endTime, position, userId, shopId, hourlywage')
+    .select('id, date, startTime, endTime, positionId, userId, shopId, hourlywage')
     .single()
 
   if (error) throw createError({ statusCode: 500, statusMessage: error.message })

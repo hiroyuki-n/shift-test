@@ -1,33 +1,28 @@
 <script setup lang="ts">
-type ShiftStatus    = 'PENDING' | 'APPROVED' | 'REJECTED'
-type EmploymentType = 'PART_TIME' | 'FULL_TIME' | null
-type DayStatus      = 'confirmed' | 'pending' | 'approved' | 'rejected'
+type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+type DayStatus   = 'confirmed' | 'pending' | 'rejected'
 
 interface CurrentUser {
   id: number; name: string; role: string
-  employmentType: EmploymentType; primaryShopId: number | null
+  employmentType: string | null; primaryShopId: number | null
 }
 interface ShiftRequest {
   id: number; date: string; startTime: string; endTime: string
   status: ShiftStatus; note: string | null; shopId: number
 }
 interface FinalShift {
-  id: number; date: string; startTime: string; endTime: string
-  position: string; shopId: number; shops: { name: string } | null
+  id: number; date: string; startTime: string; endTime: string; shopId: number
+  shops: { name: string } | null
 }
 
-// --- 認証 ---
 const { data: me } = await useFetch<CurrentUser | null>('/api/auth/me')
 const userId = computed(() => me.value?.id ?? '')
 
-// --- 所属店舗名 ---
-const { data: shopData } = await useFetch<{ shop: { name: string } } | null>(
-  () => me.value?.primaryShopId ? `/api/shops/${me.value.primaryShopId}` : null,
-  { default: () => null },
-)
-const shopName = computed(() => shopData.value?.shop?.name ?? '')
+// 社員はリダイレクト
+if (me.value && me.value.employmentType !== 'PART_TIME') {
+  await navigateTo('/full-time', { replace: true })
+}
 
-// --- 月管理 ---
 const today = new Date()
 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 const currentMonth = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
@@ -47,7 +42,6 @@ const monthLabel = computed(() => {
   return `${y}年${m}月`
 })
 
-// --- データ取得 ---
 const { data: myRequests, refresh: refreshRequests } = await useFetch<ShiftRequest[]>(
   '/api/shift-requests',
   { query: { userId, month: currentMonth }, default: () => [] },
@@ -57,34 +51,35 @@ const { data: myFinalShifts, refresh: refreshFinalShifts } = await useFetch<Fina
   { query: { userId, month: currentMonth }, default: () => [] },
 )
 
-// --- 日別ステータス＋時間マップ ---
-interface DayInfo { status: DayStatus; startTime: string; endTime: string }
-
+// 日別ステータス
 const dayInfoMap = computed(() => {
-  const map = new Map<string, DayInfo>()
-  for (const f of myFinalShifts.value) {
-    map.set(f.date, { status: 'confirmed', startTime: f.startTime, endTime: f.endTime })
-  }
+  const map = new Map<string, { status: DayStatus; startTime: string; endTime: string }>()
+  for (const f of myFinalShifts.value) map.set(f.date, { status: 'confirmed', startTime: f.startTime, endTime: f.endTime })
   for (const r of myRequests.value) {
     if (!map.has(r.date)) {
       map.set(r.date, {
         status: r.status === 'REJECTED' ? 'rejected' : 'pending',
         startTime: r.startTime,
-        endTime:   r.endTime,
+        endTime: r.endTime,
       })
     }
   }
   return map
 })
 
-// --- カレンダー生成 ---
+const STATUS_CONFIG = {
+  confirmed: { dot: 'bg-emerald-400', label: '確定' },
+  pending:   { dot: 'bg-amber-400',   label: '申請中' },
+  rejected:  { dot: 'bg-rose-400',    label: '却下' },
+}
+
 const weekDayLabels = ['月', '火', '水', '木', '金', '土', '日']
 const calendarCells = computed(() => {
   const [y, m] = currentMonth.value.split('-').map(Number)
   const firstDay = new Date(y, m - 1, 1)
   const lastDate = new Date(y, m, 0).getDate()
   const startOffset = (firstDay.getDay() + 6) % 7
-  const cells: Array<{ day: number; dateStr: string; info: DayInfo | null; isToday: boolean } | null> = []
+  const cells: Array<{ day: number; dateStr: string; info: { status: DayStatus; startTime: string; endTime: string } | null; isToday: boolean } | null> = []
   for (let i = 0; i < startOffset; i++) cells.push(null)
   for (let d = 1; d <= lastDate; d++) {
     const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -93,31 +88,17 @@ const calendarCells = computed(() => {
   return cells
 })
 
-// --- ステータス表示設定（staff 側は 3種類のみ） ---
-const STATUS_CONFIG: Record<string, { dot: string; badge: string; label: string }> = {
-  confirmed: { dot: 'bg-emerald-400', badge: 'bg-emerald-100 text-emerald-700', label: '確定' },
-  pending:   { dot: 'bg-amber-400',   badge: 'bg-amber-100 text-amber-700',     label: '申請中' },
-  rejected:  { dot: 'bg-rose-400',    badge: 'bg-rose-100 text-rose-700',       label: '却下' },
-}
-
-// リスト表示用：PENDING・APPROVED → 申請中 / REJECTED → 却下
-function requestStatusCfg(status: ShiftStatus) {
-  return status === 'REJECTED'
-    ? STATUS_CONFIG.rejected
-    : STATUS_CONFIG.pending
-}
-
-// --- モーダル ---
-const selectedDate   = ref<string | null>(null)
-const showModal      = ref(false)
-const submitting     = ref(false)
-const formError      = ref('')
+// モーダル
+const selectedDate = ref<string | null>(null)
+const showModal    = ref(false)
+const submitting   = ref(false)
+const formError    = ref('')
 
 const selectedRequest = computed(() =>
-  selectedDate.value ? myRequests.value.find(r => r.date === selectedDate.value) ?? null : null
+  selectedDate.value ? myRequests.value.find(r => r.date === selectedDate.value) ?? null : null,
 )
 const selectedFinal = computed(() =>
-  selectedDate.value ? myFinalShifts.value.find(f => f.date === selectedDate.value) ?? null : null
+  selectedDate.value ? myFinalShifts.value.find(f => f.date === selectedDate.value) ?? null : null,
 )
 const selectedDateLabel = computed(() => {
   if (!selectedDate.value) return ''
@@ -128,60 +109,42 @@ const selectedDateLabel = computed(() => {
 
 function openModal(dateStr: string) {
   selectedDate.value = dateStr
-  form.startTime = '09:00'
-  form.endTime = '17:00'
-  formError.value = ''
+  form.startTime = '09:00'; form.endTime = '17:00'; formError.value = ''
   showModal.value = true
 }
-function closeModal() {
-  showModal.value = false
-  selectedDate.value = null
-  formError.value = ''
-}
+function closeModal() { showModal.value = false; selectedDate.value = null; formError.value = '' }
 
-// --- フォーム（アルバイト用 時間選択） ---
 const form = reactive({ startTime: '09:00', endTime: '17:00' })
-
 const timeSlots = Array.from({ length: 29 }, (_, i) => {
   const min = 8 * 60 + i * 30
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 })
 const endTimeSlots = computed(() => timeSlots.filter(t => t > form.startTime))
-
-watch(() => form.startTime, (v) => {
+watch(() => form.startTime, v => {
   if (form.endTime <= v) {
     const idx = timeSlots.indexOf(v)
     form.endTime = timeSlots[Math.min(idx + 2, timeSlots.length - 1)]
   }
 })
 
-// --- 提出処理 ---
-async function submitShift(startTime: string, endTime: string) {
+async function submitShift(start: string, end: string) {
   if (!selectedDate.value || !userId.value) return
-  submitting.value = true
-  formError.value = ''
+  submitting.value = true; formError.value = ''
   try {
     await $fetch('/api/shift-requests', {
       method: 'POST',
-      body: { userId: userId.value, date: selectedDate.value, startTime, endTime },
+      body: { userId: userId.value, date: selectedDate.value, startTime: start, endTime: end },
     })
-    await refreshRequests()
-    closeModal()
+    await refreshRequests(); closeModal()
   } catch (e: unknown) {
     formError.value = (e as { statusMessage?: string })?.statusMessage ?? '提出に失敗しました'
-  } finally {
-    submitting.value = false
-  }
+  } finally { submitting.value = false }
 }
 
-// --- 表示ユーティリティ ---
 function formatTime(iso: string): string {
   const d = new Date(iso)
   const min = (d.getUTCHours() * 60 + d.getUTCMinutes() + 540) % 1440
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
-}
-const positionLabel: Record<string, string> = {
-  HALL: 'ホール', KITCHEN: 'キッチン', CASHIER: 'レジ', MANAGER: '管理', OTHER: 'その他',
 }
 
 async function logout() {
@@ -189,31 +152,16 @@ async function logout() {
   await navigateTo('/')
 }
 
-// --- Supabase Realtime：カレンダーの即時反映 ---
+// Realtime
 const supabase = useSupabaseClient()
-
 onMounted(() => {
   if (!userId.value) return
-
-  const channel = supabase
-    .channel(`staff-shifts-${userId.value}`)
-    // 確定シフト 作成 → カレンダーに「確定」を即時反映
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'final_shifts' },
-      async () => { await refreshFinalShifts() },
-    )
-    // 確定シフト 削除 → カレンダーから「確定」を即時除去
-    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'final_shifts' },
-      async () => { await refreshFinalShifts() },
-    )
-    // 希望シフトのステータス変更 → 申請中/却下をカレンダーに即時反映
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shift_requests' },
-      async () => { await refreshRequests() },
-    )
+  const channel = supabase.channel(`pt-${userId.value}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'final_shifts' }, async () => { await refreshFinalShifts() })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'final_shifts' }, async () => { await refreshFinalShifts() })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shift_requests' }, async () => { await refreshRequests() })
     .subscribe()
-
-  onUnmounted(() => {
-    supabase.removeChannel(channel)
-  })
+  onUnmounted(() => supabase.removeChannel(channel))
 })
 </script>
 
@@ -221,51 +169,34 @@ onMounted(() => {
   <main class="min-h-screen bg-slate-50 p-4 sm:p-6">
     <div class="mx-auto max-w-2xl">
 
-      <!-- 未ログイン -->
       <div v-if="!me" class="mt-12 rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <h1 class="text-xl font-bold text-slate-800">ログインが必要です</h1>
         <NuxtLink to="/" class="mt-4 inline-block text-sm font-medium text-brand hover:underline">トップへ戻る</NuxtLink>
       </div>
 
       <template v-else>
-        <!-- ヘッダー -->
         <header class="mb-6 flex items-end justify-between">
           <div>
             <h1 class="text-2xl font-bold text-slate-800">マイシフト</h1>
-            <p class="mt-0.5 text-sm text-slate-500">
-              {{ me.name }} さん ／
-              <span class="font-medium">{{ me.employmentType === 'FULL_TIME' ? '社員' : 'アルバイト' }}</span>
-              <template v-if="shopName"> ／ {{ shopName }}</template>
-            </p>
+            <p class="mt-0.5 text-sm text-slate-500">{{ me.name }} さん ／ <span class="font-medium">アルバイト</span></p>
           </div>
-          <button
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
-            @click="logout"
-          >ログアウト</button>
+          <button class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="logout">ログアウト</button>
         </header>
 
-        <!-- カレンダーセクション -->
-        <section class="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
-          <!-- 月ナビ -->
+        <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div class="flex items-center justify-between border-b border-slate-100 px-5 py-3">
             <button class="rounded px-2 py-1 text-sm text-slate-500 hover:bg-slate-100" @click="prevMonth">‹ 前月</button>
             <span class="text-sm font-semibold text-slate-700">{{ monthLabel }}</span>
             <button class="rounded px-2 py-1 text-sm text-slate-500 hover:bg-slate-100" @click="nextMonth">翌月 ›</button>
           </div>
 
-          <!-- 凡例 -->
           <div class="flex flex-wrap gap-x-4 gap-y-1 px-5 py-2 text-xs text-slate-500">
             <span v-for="(cfg, key) in STATUS_CONFIG" :key="key" class="flex items-center gap-1">
-              <span class="inline-block h-2.5 w-2.5 rounded-full" :class="cfg.dot" />
-              {{ cfg.label }}
+              <span class="inline-block h-2.5 w-2.5 rounded-full" :class="cfg.dot" />{{ cfg.label }}
             </span>
-            <span class="flex items-center gap-1">
-              <span class="inline-block h-2.5 w-2.5 rounded-full bg-slate-200" />
-              未提出
-            </span>
+            <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full bg-slate-200" />未提出</span>
           </div>
 
-          <!-- グリッド -->
           <div class="px-4 pb-4">
             <div class="grid grid-cols-7">
               <div
@@ -275,13 +206,11 @@ onMounted(() => {
               >{{ label }}</div>
             </div>
             <div class="grid grid-cols-7 gap-1">
-              <div v-for="(cell, i) in calendarCells" :key="i">
-                <!-- 空白セル -->
-                <div v-if="!cell" class="h-14" />
-                <!-- 日付セル -->
+              <div v-for="(cell, i) in calendarCells" :key="i" class="aspect-square">
+                <div v-if="!cell" />
                 <button
                   v-else
-                  class="flex h-14 w-full flex-col items-center justify-center rounded-lg px-0.5 text-xs font-medium transition"
+                  class="flex h-full w-full flex-col items-center justify-center rounded-lg text-xs font-medium transition"
                   :class="[
                     cell.isToday ? 'ring-2 ring-brand ring-offset-1' : '',
                     cell.info?.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700'
@@ -293,101 +222,53 @@ onMounted(() => {
                 >
                   <span class="text-sm font-semibold leading-none">{{ cell.day }}</span>
                   <template v-if="cell.info">
-                    <span class="mt-0.5 leading-none opacity-80" style="font-size:9px">
-                      {{ formatTime(cell.info.startTime) }}
-                    </span>
-                    <span class="leading-none opacity-80" style="font-size:9px">
-                      〜{{ formatTime(cell.info.endTime) }}
-                    </span>
+                    <span class="mt-0.5 leading-none opacity-80" style="font-size:9px">{{ formatTime(cell.info.startTime) }}</span>
+                    <span class="leading-none opacity-80" style="font-size:9px">〜{{ formatTime(cell.info.endTime) }}</span>
                   </template>
                 </button>
               </div>
             </div>
           </div>
         </section>
-
       </template>
     </div>
 
     <!-- モーダル -->
     <Teleport to="body">
-      <div
-        v-if="showModal"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        @click.self="closeModal"
-      >
+      <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="closeModal">
         <div class="w-full max-w-sm rounded-xl bg-white shadow-xl">
-          <!-- モーダルヘッダー -->
           <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <h3 class="font-semibold text-slate-800">{{ selectedDateLabel }}</h3>
             <button class="text-slate-400 hover:text-slate-600" @click="closeModal">✕</button>
           </div>
-
           <div class="px-5 py-5">
-
             <!-- 確定済み -->
             <template v-if="selectedFinal">
-              <div class="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                <span class="text-base">✅</span>
-                <div>
-                  <p class="font-semibold">確定済みです</p>
-                  <p>{{ formatTime(selectedFinal.startTime) }}〜{{ formatTime(selectedFinal.endTime) }} ／ {{ positionLabel[selectedFinal.position] ?? selectedFinal.position }}</p>
-                </div>
+              <div class="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                <p class="font-semibold">確定済みです</p>
+                <p>{{ formatTime(selectedFinal.startTime) }}〜{{ formatTime(selectedFinal.endTime) }}</p>
               </div>
             </template>
-
-            <!-- 提出済み（申請中 or 却下） -->
+            <!-- 提出済み -->
             <template v-else-if="selectedRequest">
-              <div
-                class="flex items-center gap-2 rounded-lg px-4 py-3 text-sm"
-                :class="requestStatusCfg(selectedRequest.status).badge"
-              >
-                <div>
-                  <p class="font-semibold">{{ requestStatusCfg(selectedRequest.status).label }}</p>
-                  <p>{{ formatTime(selectedRequest.startTime) }}〜{{ formatTime(selectedRequest.endTime) }}</p>
-                </div>
+              <div class="mb-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                <p class="font-semibold">申請中</p>
+                <p>{{ formatTime(selectedRequest.startTime) }}〜{{ formatTime(selectedRequest.endTime) }}</p>
               </div>
             </template>
-
-            <!-- 未提出：社員 -->
-            <template v-else-if="me?.employmentType === 'FULL_TIME'">
-              <p class="mb-4 text-sm text-slate-500">出勤・欠勤を選択してください</p>
-              <div class="flex gap-3">
-                <button
-                  class="flex-1 rounded-lg bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
-                  :disabled="submitting"
-                  @click="submitShift('09:00', '18:00')"
-                >
-                  {{ submitting ? '提出中…' : '出勤（09:00〜18:00）' }}
-                </button>
-                <button
-                  class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                  @click="closeModal"
-                >
-                  欠勤
-                </button>
-              </div>
-            </template>
-
-            <!-- 未提出：アルバイト -->
+            <!-- 未提出 -->
             <template v-else>
               <p class="mb-4 text-sm text-slate-500">勤務時間を選択してください</p>
               <div class="mb-4 grid grid-cols-2 gap-3">
                 <label class="block">
                   <span class="mb-1 block text-xs font-medium text-slate-600">開始時間</span>
-                  <select
-                    v-model="form.startTime"
-                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-                  >
+                  <select v-model="form.startTime" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none">
                     <option v-for="t in timeSlots.slice(0, -1)" :key="t" :value="t">{{ t }}</option>
                   </select>
                 </label>
                 <label class="block">
                   <span class="mb-1 block text-xs font-medium text-slate-600">終了時間</span>
-                  <select
-                    v-model="form.endTime"
-                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-                  >
+                  <select v-model="form.endTime" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none">
                     <option v-for="t in endTimeSlots" :key="t" :value="t">{{ t }}</option>
                   </select>
                 </label>
@@ -397,11 +278,8 @@ onMounted(() => {
                 class="w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
                 :disabled="submitting"
                 @click="submitShift(form.startTime, form.endTime)"
-              >
-                {{ submitting ? '提出中…' : '希望を提出する' }}
-              </button>
+              >{{ submitting ? '提出中…' : '希望を提出する' }}</button>
             </template>
-
           </div>
         </div>
       </div>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 type EmploymentType = 'PART_TIME' | 'FULL_TIME'
-type Position       = 'HALL' | 'KITCHEN' | 'CASHIER' | 'MANAGER' | 'OTHER'
 type ShiftStatus    = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 interface Staff {
@@ -20,10 +19,11 @@ interface FinalShift {
   date: string
   startTime: string
   endTime: string
-  position: Position
+  positionId: number | null
   userId: number
   shopId: number
   users: { name: string } | null
+  shop_positions: { name: string } | null
 }
 
 interface ShiftRequest {
@@ -97,17 +97,6 @@ const calendarCells = computed(() => {
   return cells
 })
 
-// --- ポジション ---
-const positionLabel: Record<Position, string> = {
-  HALL: 'ホール', KITCHEN: 'キッチン', CASHIER: 'レジ', MANAGER: '管理', OTHER: 'その他',
-}
-const positionColor: Record<Position, string> = {
-  HALL:    'bg-blue-100 text-blue-700',
-  KITCHEN: 'bg-orange-100 text-orange-700',
-  CASHIER: 'bg-emerald-100 text-emerald-700',
-  MANAGER: 'bg-purple-100 text-purple-700',
-  OTHER:   'bg-slate-100 text-slate-600',
-}
 
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
@@ -254,23 +243,15 @@ function statusCellClass(stats: DayStats, isToday: boolean) {
                 <ul class="space-y-0.5">
                   <li
                     v-for="shift in cell.shifts" :key="shift.id"
-                    class="rounded px-1 py-0.5 text-xs leading-tight"
-                    :class="positionColor[shift.position]"
+                    class="rounded bg-blue-50 px-1 py-0.5 text-xs leading-tight text-blue-700"
                   >
                     <p class="font-medium">{{ shift.users?.name ?? '—' }}</p>
-                    <p class="opacity-75">{{ formatTime(shift.startTime) }}〜{{ formatTime(shift.endTime) }}</p>
+                    <p class="opacity-75">{{ shift.shop_positions?.name ?? formatTime(shift.startTime) }}</p>
                   </li>
                 </ul>
               </template>
             </div>
           </div>
-        </div>
-        <div class="flex flex-wrap gap-2 border-t border-slate-100 px-6 py-3">
-          <span
-            v-for="(label, pos) in positionLabel" :key="pos"
-            class="rounded-full px-2.5 py-0.5 text-xs font-medium"
-            :class="positionColor[pos as Position]"
-          >{{ label }}</span>
         </div>
       </section>
 
