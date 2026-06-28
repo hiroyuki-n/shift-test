@@ -9,6 +9,7 @@ interface Staff {
   role: string
   employmentType: 'PART_TIME' | 'FULL_TIME' | null
   primaryShopId: number | null
+  createdAt: string
   full_time_settings: { workpattern: string | null } | null
   part_time_settings: { hourlywage: number | null } | null
 }
@@ -30,6 +31,12 @@ const fullTimeStaff = computed(() =>
 const partTimeStaff = computed(() =>
   staffList.value.filter(s => s.employmentType === 'PART_TIME').sort((a, b) => a.id - b.id),
 )
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('ja-JP', {
+    year: 'numeric', month: 'short', day: 'numeric',
+  })
+}
 </script>
 
 <template>
@@ -63,7 +70,7 @@ const partTimeStaff = computed(() =>
               <th class="px-6 py-3">ID</th>
               <th class="px-6 py-3">氏名</th>
               <th class="px-6 py-3">所属店舗</th>
-              <th class="px-6 py-3">勤務パターン</th>
+              <th class="px-6 py-3">登録日</th>
               <th class="px-6 py-3 text-right">詳細</th>
             </tr>
           </thead>
@@ -72,7 +79,7 @@ const partTimeStaff = computed(() =>
               <td class="px-6 py-3 font-mono text-xs text-slate-400">{{ staff.id }}</td>
               <td class="px-6 py-3 font-medium text-slate-800">{{ staff.name }}</td>
               <td class="px-6 py-3 text-slate-600">{{ staff.primaryShopId ? shopMap.get(staff.primaryShopId) ?? '—' : '—' }}</td>
-              <td class="px-6 py-3 text-slate-500 text-xs">{{ staff.full_time_settings?.workpattern ?? '—' }}</td>
+              <td class="px-6 py-3 text-xs text-slate-500">{{ staff.createdAt ? formatDate(staff.createdAt) : '—' }}</td>
               <td class="px-6 py-3 text-right">
                 <NuxtLink :to="`/admin/staff/${staff.id}`" class="inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline">
                   詳細<ArrowRightIcon class="h-3.5 w-3.5" />
@@ -101,6 +108,7 @@ const partTimeStaff = computed(() =>
               <th class="px-6 py-3">氏名</th>
               <th class="px-6 py-3">所属店舗</th>
               <th class="px-6 py-3">時給</th>
+              <th class="px-6 py-3">登録日</th>
               <th class="px-6 py-3 text-right">詳細</th>
             </tr>
           </thead>
@@ -112,6 +120,7 @@ const partTimeStaff = computed(() =>
               <td class="px-6 py-3 text-slate-600">
                 {{ staff.part_time_settings?.hourlywage != null ? `${staff.part_time_settings.hourlywage} 円` : '—' }}
               </td>
+              <td class="px-6 py-3 text-xs text-slate-500">{{ staff.createdAt ? formatDate(staff.createdAt) : '—' }}</td>
               <td class="px-6 py-3 text-right">
                 <NuxtLink :to="`/admin/staff/${staff.id}`" class="inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline">
                   詳細<ArrowRightIcon class="h-3.5 w-3.5" />

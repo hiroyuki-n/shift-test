@@ -6,7 +6,6 @@ import { hashPassword } from '~~/server/utils/password'
  * POST /api/staff
  *   body: { name, password, employmentType: 'PART_TIME' | 'FULL_TIME', primaryShopId }
  *
- * users への登録に加え、shop_memberships（メイン所属）も作成する。
  * パスワードは PBKDF2 でハッシュ化して保存する。
  */
 export default defineEventHandler(async (event) => {
@@ -46,12 +45,6 @@ export default defineEventHandler(async (event) => {
   if (error) {
     throw createError({ statusCode: 500, statusMessage: error.message })
   }
-
-  const { error: membershipError } = await client
-    .from('shop_memberships')
-    .insert({ userId: data.id, shopId: primaryShopId, type: 'PRIMARY' })
-
-  if (membershipError) throw createError({ statusCode: 500, statusMessage: membershipError.message })
 
   // 雇用形態に応じた設定テーブルに初期レコードを作成
   const settingsTable = employmentType === 'FULL_TIME' ? 'full_time_settings' : 'part_time_settings'
