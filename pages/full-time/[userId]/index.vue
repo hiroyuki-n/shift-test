@@ -155,6 +155,7 @@ onMounted(() => {
           <div class="flex gap-4 px-5 py-2 text-xs text-slate-500">
             <span class="flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-emerald-400" />確定</span>
             <span class="flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-amber-400" />申請中</span>
+            <span class="flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-rose-400" />休み</span>
             <span class="flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-slate-200" />未提出</span>
           </div>
 
@@ -177,6 +178,7 @@ onMounted(() => {
                     cell.isToday ? 'border-brand' : 'border-slate-100',
                     cell.status === 'confirmed' ? 'bg-emerald-50'
                     : cell.status === 'pending'   ? 'bg-amber-50'
+                    : cell.status === 'absent'    ? 'bg-rose-50'
                     : 'bg-white'
                   ]"
                 >
@@ -195,6 +197,11 @@ onMounted(() => {
                       :disabled="submitting === cell.dateStr"
                       @click="markAbsent(cell.dateStr)"
                     >取消</button>
+                  </div>
+
+                  <!-- 休み -->
+                  <div v-else-if="cell.status === 'absent'" class="flex flex-1 items-center justify-center">
+                    <span class="rounded-full bg-rose-400 px-2 py-0.5 text-xs font-bold text-white">休み</span>
                   </div>
 
                   <!-- 未提出 -->

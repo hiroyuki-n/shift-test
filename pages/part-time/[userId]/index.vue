@@ -79,7 +79,7 @@ const dayInfoMap = computed(() => {
 const STATUS_CONFIG = {
   confirmed: { dot: 'bg-emerald-400', label: '確定' },
   pending:   { dot: 'bg-amber-400',   label: '申請中' },
-  rejected:  { dot: 'bg-rose-400',    label: '却下' },
+  rejected:  { dot: 'bg-rose-400',    label: '休み' },
 }
 
 const weekDayLabels = ['月', '火', '水', '木', '金', '土', '日']
@@ -229,9 +229,13 @@ onMounted(() => {
                   @click="openModal(cell.dateStr)"
                 >
                   <span class="text-sm font-semibold leading-none">{{ cell.day }}</span>
-                  <template v-if="cell.info">
+                  <!-- 休み（rejected）は時間を非表示、その他は時間を表示 -->
+                  <template v-if="cell.info && cell.info.status !== 'rejected'">
                     <span class="mt-0.5 leading-none opacity-80" style="font-size:9px">{{ formatTime(cell.info.startTime) }}</span>
                     <span class="leading-none opacity-80" style="font-size:9px">〜{{ formatTime(cell.info.endTime) }}</span>
+                  </template>
+                  <template v-else-if="cell.info?.status === 'rejected'">
+                    <span class="mt-0.5 leading-none opacity-80" style="font-size:9px">休み</span>
                   </template>
                 </button>
               </div>
