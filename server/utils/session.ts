@@ -24,6 +24,6 @@ export function getSessionUserId(event: H3Event): string | null {
   return getCookie(event, COOKIE_NAME) || null
 }
 
-export function clearSession(event: H3Event) {
+export function clearUserSession(event: H3Event) {
   deleteCookie(event, COOKIE_NAME, { path: '/' })
 }

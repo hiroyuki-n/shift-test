@@ -24,6 +24,8 @@ export default defineNuxtConfig({
     // 現状はモック画面のため、未ログインでも全ページ閲覧可能にする。
     // 認証導入時に redirect を有効化し、redirectOptions で保護パスを指定する。
     redirect: false,
+    // 自動生成の型ファイルは未使用のため無効化（必要になれば types を指定）
+    types: false,
   },
 
   vite: {

@@ -9,7 +9,6 @@ import {
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title)
 
 type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
-type Position    = 'HALL' | 'KITCHEN' | 'CASHIER' | 'MANAGER' | 'OTHER'
 
 interface ShiftRequest {
   id: number; date: string; startTime: string; endTime: string
@@ -17,7 +16,7 @@ interface ShiftRequest {
 }
 interface FinalShift {
   id: number; date: string; startTime: string; endTime: string
-  position: Position; shopId: number
+  shopId: number
 }
 
 const props = defineProps<{

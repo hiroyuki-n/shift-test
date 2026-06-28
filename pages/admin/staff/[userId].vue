@@ -55,6 +55,26 @@ const shopName = computed(() =>
     : '—',
 )
 
+// --- 在籍 / 退職の切り替え ---
+const activeToggling = ref(false)
+const activeError    = ref('')
+
+async function toggleActive() {
+  if (!staff.value) return
+  const next = !staff.value.isActive
+  if (!next && !confirm(`${staff.value.name} さんを退職済みにしますか？`)) return
+  activeToggling.value = true; activeError.value = ''
+  try {
+    await $fetch(`/api/staff/${userId}`, {
+      method: 'PATCH',
+      body: { isActive: next },
+    })
+    await refreshStaff()
+  } catch (e: unknown) {
+    activeError.value = (e as { statusMessage?: string })?.statusMessage ?? '更新に失敗しました'
+  } finally { activeToggling.value = false }
+}
+
 // --- 給与計算（アルバイトのみ） ---
 const currentYear = new Date().getFullYear()
 const selectedYear = ref(currentYear)
@@ -160,12 +180,25 @@ function formatDate(iso: string) {
         </div>
         <div class="flex items-center justify-between px-6 py-3">
           <dt class="text-sm text-slate-500">在籍状態</dt>
-          <dd>
+          <dd class="flex items-center gap-3">
             <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
               :class="staff?.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'">
               {{ staff?.isActive ? '在籍中' : '退職済み' }}
             </span>
+            <button
+              class="rounded-lg border px-3 py-1 text-xs font-semibold transition disabled:opacity-50"
+              :class="staff?.isActive
+                ? 'border-rose-300 text-rose-600 hover:bg-rose-50'
+                : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'"
+              :disabled="activeToggling"
+              @click="toggleActive"
+            >
+              {{ activeToggling ? '更新中…' : staff?.isActive ? '退職にする' : '在籍に戻す' }}
+            </button>
           </dd>
+        </div>
+        <div v-if="activeError" class="px-6 pb-2">
+          <p class="text-xs text-rose-600">{{ activeError }}</p>
         </div>
         <div class="flex items-center justify-between px-6 py-3">
           <dt class="text-sm text-slate-500">登録日</dt>

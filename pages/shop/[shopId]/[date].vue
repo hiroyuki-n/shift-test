@@ -281,29 +281,52 @@ const dateLabel = computed(() =>
       <!-- 右：確定済みは確定一覧 / 未確定は申請一覧 -->
       <div class="space-y-4">
 
-        <!-- 確定済み一覧 -->
+        <!-- 確定済み一覧（社員・アルバイト分割） -->
         <template v-if="isConfirmed">
+
+          <!-- 社員 -->
           <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="border-b border-slate-100 px-5 py-3">
-              <h2 class="text-sm font-semibold text-slate-700">確定シフト <span class="ml-1.5 font-normal text-slate-400">{{ shifts.length }}人</span></h2>
+              <h2 class="text-sm font-semibold text-slate-700">
+                社員
+                <span class="ml-1.5 font-normal text-slate-400">{{ shifts.filter(s => s.users?.employmentType === 'FULL_TIME').length }}人</span>
+              </h2>
             </div>
             <ul class="divide-y divide-slate-100">
               <li
-                v-for="s in [...shifts].sort((a, b) => a.startTime.localeCompare(b.startTime))"
+                v-for="s in shifts.filter(s => s.users?.employmentType === 'FULL_TIME').sort((a, b) => (a.users?.name ?? '').localeCompare(b.users?.name ?? ''))"
+                :key="s.id"
+                class="flex items-center justify-between px-5 py-2.5"
+              >
+                <span class="text-sm font-medium text-slate-800">{{ s.users?.name ?? '—' }}</span>
+                <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">終日</span>
+              </li>
+              <li v-if="!shifts.some(s => s.users?.employmentType === 'FULL_TIME')" class="px-5 py-4 text-center text-sm text-slate-400">社員のシフトはありません</li>
+            </ul>
+          </section>
+
+          <!-- アルバイト -->
+          <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="border-b border-slate-100 px-5 py-3">
+              <h2 class="text-sm font-semibold text-slate-700">
+                アルバイト
+                <span class="ml-1.5 font-normal text-slate-400">{{ shifts.filter(s => s.users?.employmentType !== 'FULL_TIME').length }}人</span>
+              </h2>
+            </div>
+            <ul class="divide-y divide-slate-100">
+              <li
+                v-for="s in shifts.filter(s => s.users?.employmentType !== 'FULL_TIME').sort((a, b) => a.startTime.localeCompare(b.startTime))"
                 :key="s.id"
                 class="flex items-center gap-2 px-5 py-2.5"
               >
-                <span v-if="s.users?.employmentType !== 'FULL_TIME'" class="shrink-0 text-xs text-slate-500">
-                  {{ formatTime(s.startTime) }}〜{{ formatTime(s.endTime) }}
-                </span>
+                <span class="shrink-0 text-xs text-slate-500">{{ formatTime(s.startTime) }}〜{{ formatTime(s.endTime) }}</span>
                 <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ s.users?.name ?? '—' }}</span>
-                <span
-                  class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-                  :class="s.users?.employmentType === 'FULL_TIME' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'"
-                >{{ s.users?.employmentType === 'FULL_TIME' ? '終日' : (s.shop_positions?.name ?? '—') }}</span>
+                <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ s.shop_positions?.name ?? '—' }}</span>
               </li>
+              <li v-if="!shifts.some(s => s.users?.employmentType !== 'FULL_TIME')" class="px-5 py-4 text-center text-sm text-slate-400">アルバイトのシフトはありません</li>
             </ul>
           </section>
+
         </template>
 
         <!-- 申請一覧（未確定時のみ） -->

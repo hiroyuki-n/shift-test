@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BuildingStorefrontIcon, UserGroupIcon, ClockIcon, PlusIcon, ArrowRightIcon } from '@heroicons/vue/24/outline'
+import { BuildingStorefrontIcon, UserGroupIcon, ClockIcon } from '@heroicons/vue/24/outline'
 
 definePageMeta({ layout: 'admin' })
 
@@ -34,30 +34,6 @@ const dashboard = computed(() => ({
   pendingRequests: stats.value?.pendingRequests ?? 0,
 }))
 
-// --- 店舗新規追加フォーム ---
-const showForm = ref(false)
-const newShop = reactive({ name: '' })
-const submitting = ref(false)
-const formError = ref('')
-
-async function addShop() {
-  if (!newShop.name.trim()) return
-  submitting.value = true
-  formError.value = ''
-  try {
-    await $fetch('/api/shops', {
-      method: 'POST',
-      body: { name: newShop.name.trim() },
-    })
-    newShop.name = ''
-    showForm.value = false
-    await refresh()
-  } catch (e: unknown) {
-    formError.value = e instanceof Error ? e.message : '店舗の追加に失敗しました'
-  } finally {
-    submitting.value = false
-  }
-}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ja-JP')
