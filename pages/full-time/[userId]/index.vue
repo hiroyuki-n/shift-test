@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: 'staff' })
+
 interface CurrentUser {
   employmentType: string | null; primaryShopId: number | null
 }

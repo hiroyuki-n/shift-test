@@ -4,9 +4,9 @@ import { HomeIcon, BuildingStorefrontIcon, UsersIcon } from '@heroicons/vue/24/o
 const route = useRoute()
 
 const navItems = [
-  { label: 'ダッシュボード', to: '/admin',        icon: HomeIcon,                },
-  { label: '店舗一覧',       to: '/admin/shops',  icon: BuildingStorefrontIcon,  },
-  { label: 'スタッフ一覧',   to: '/admin/staff',  icon: UsersIcon,               },
+  { label: 'ダッシュボード', to: '/admin',        icon: HomeIcon,               },
+  { label: '店舗',           to: '/admin/shops',  icon: BuildingStorefrontIcon, },
+  { label: 'スタッフ',       to: '/admin/staff',  icon: UsersIcon,              },
 ]
 </script>
 

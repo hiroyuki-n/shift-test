@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: 'staff' })
+
 type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 type DayStatus   = 'confirmed' | 'pending' | 'rejected'
 
