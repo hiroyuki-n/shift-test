@@ -6,7 +6,6 @@ interface Staff {
   id: number
   name: string
   employmentType: EmploymentType | null
-  role: string
 }
 
 interface ShopDetail {

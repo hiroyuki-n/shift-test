@@ -34,12 +34,11 @@ export default defineEventHandler(async (event) => {
     .insert({
       name,
       passwordHash,
-      role: 'STAFF',
       employmentType,
       primaryShopId,
       updatedAt: now,
     })
-    .select('id, name, employmentType, role')
+    .select('id, name, employmentType')
     .single()
 
   if (error) {

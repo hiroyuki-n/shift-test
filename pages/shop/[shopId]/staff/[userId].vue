@@ -7,13 +7,12 @@ type EmploymentType = 'PART_TIME' | 'FULL_TIME'
 interface StaffInfo {
   id: number
   name: string
-  role: string
   employmentType: EmploymentType | null
   isActive: boolean
   primaryShopId: number | null
   createdAt: string
   updatedAt: string
-  full_time_settings: { workpattern: string | null } | null
+  full_time_settings: Record<string, never> | null
   part_time_settings: { hourlywage: number | null } | null
 }
 
@@ -78,12 +77,6 @@ const employmentLabel: Record<EmploymentType, string> = {
   FULL_TIME: '社員',
 }
 
-const roleLabel: Record<string, string> = {
-  SUPER_ADMIN: '本社管理者',
-  SHOP_ADMIN:  '店長',
-  STAFF:       'スタッフ',
-}
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -112,9 +105,6 @@ const workDays = computed(() => new Set(finalShifts.value.map(s => s.date)).size
 
     <!-- ヘッダー -->
     <header class="mb-8">
-      <NuxtLink :to="`/shop/${shopId}/staff`" class="mb-3 inline-block text-xs text-slate-400 hover:underline">
-        ← スタッフ一覧へ戻る
-      </NuxtLink>
 
       <div class="flex items-center justify-between">
         <div>
@@ -130,12 +120,6 @@ const workDays = computed(() => new Set(finalShifts.value.map(s => s.date)).size
           </div>
         </div>
 
-        <NuxtLink
-          :to="`/login/${userId}`"
-          class="rounded-lg border border-brand px-4 py-2 text-sm font-semibold text-brand hover:bg-brand hover:text-white transition"
-        >
-          ログインページ
-        </NuxtLink>
       </div>
     </header>
 
@@ -153,12 +137,6 @@ const workDays = computed(() => new Set(finalShifts.value.map(s => s.date)).size
           <dt class="text-xs text-slate-400">雇用形態</dt>
           <dd class="mt-1 text-sm font-semibold text-slate-800">
             {{ staff?.employmentType ? employmentLabel[staff.employmentType as EmploymentType] : '—' }}
-          </dd>
-        </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">権限</dt>
-          <dd class="mt-1 text-sm font-semibold text-slate-800">
-            {{ staff?.role ? roleLabel[staff.role] ?? staff.role : '—' }}
           </dd>
         </div>
         <div class="bg-white px-5 py-4">
@@ -183,26 +161,16 @@ const workDays = computed(() => new Set(finalShifts.value.map(s => s.date)).size
       </dl>
     </section>
 
-    <!-- 雇用形態別設定（表示のみ） -->
-    <section class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
+    <!-- アルバイト設定（時給・表示のみ） -->
+    <section v-if="staff?.employmentType === 'PART_TIME'" class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-100 px-6 py-3">
-        <h2 class="text-sm font-semibold text-slate-700">
-          {{ staff?.employmentType === 'FULL_TIME' ? '社員設定' : 'アルバイト設定' }}
-        </h2>
+        <h2 class="text-sm font-semibold text-slate-700">アルバイト設定</h2>
       </div>
       <dl class="px-6 py-4">
-        <template v-if="staff?.employmentType === 'PART_TIME'">
-          <dt class="text-xs text-slate-400">時給</dt>
-          <dd class="mt-1 text-sm font-semibold text-slate-800">
-            {{ staff.part_time_settings?.hourlywage != null ? `${staff.part_time_settings.hourlywage} 円 / 時` : '未設定' }}
-          </dd>
-        </template>
-        <template v-else-if="staff?.employmentType === 'FULL_TIME'">
-          <dt class="text-xs text-slate-400">勤務パターン</dt>
-          <dd class="mt-1 text-sm font-semibold text-slate-800">
-            {{ staff.full_time_settings?.workpattern ?? '未設定' }}
-          </dd>
-        </template>
+        <dt class="text-xs text-slate-400">時給</dt>
+        <dd class="mt-1 text-sm font-semibold text-slate-800">
+          {{ staff.part_time_settings?.hourlywage != null ? `${staff.part_time_settings.hourlywage} 円 / 時` : '未設定' }}
+        </dd>
       </dl>
     </section>
 

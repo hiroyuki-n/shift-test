@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
 
   const { data: user, error } = await client
     .from('users')
-    .select('id, name, role, employmentType, isActive, primaryShopId, createdAt, updatedAt')
+    .select('id, name, employmentType, isActive, primaryShopId, createdAt, updatedAt')
     .eq('id', userId)
     .maybeSingle()
 
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
 
   // 設定テーブルを別取得
   const [{ data: ftSettings }, { data: ptSettings }] = await Promise.all([
-    client.from('full_time_settings').select('userId, workpattern').eq('userId', userId).maybeSingle(),
+    client.from('full_time_settings').select('userId').eq('userId', userId).maybeSingle(),
     client.from('part_time_settings').select('userId, hourlywage').eq('userId', userId).maybeSingle(),
   ])
 

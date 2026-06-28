@@ -8,13 +8,12 @@ type EmploymentType = 'PART_TIME' | 'FULL_TIME'
 interface StaffInfo {
   id: number
   name: string
-  role: string
   employmentType: EmploymentType | null
   isActive: boolean
   primaryShopId: number | null
   createdAt: string
   updatedAt: string
-  full_time_settings: { workpattern: string | null } | null
+  full_time_settings: Record<string, never> | null
   part_time_settings: { hourlywage: number | null } | null
 }
 
@@ -26,33 +25,6 @@ const userId = route.params.userId as string
 const { data: staff, refresh: refreshStaff } = await useFetch<StaffInfo>(`/api/staff/${userId}`)
 const { data: shops } = await useFetch<Shop[]>('/api/shops', { default: () => [] })
 
-// --- 雇用形態の変更 ---
-const editingEmployment = ref(false)
-const newEmploymentType = ref<EmploymentType | ''>('')
-const saving            = ref(false)
-const saveError         = ref('')
-
-function startEdit() {
-  newEmploymentType.value = staff.value?.employmentType ?? ''
-  editingEmployment.value = true
-  saveError.value = ''
-}
-function cancelEdit() { editingEmployment.value = false }
-
-async function saveEmploymentType() {
-  if (!newEmploymentType.value) return
-  saving.value = true; saveError.value = ''
-  try {
-    await $fetch(`/api/staff/${userId}`, {
-      method: 'PATCH',
-      body: { employmentType: newEmploymentType.value },
-    })
-    await refreshStaff()
-    editingEmployment.value = false
-  } catch (e: unknown) {
-    saveError.value = (e as { statusMessage?: string })?.statusMessage ?? '更新に失敗しました'
-  } finally { saving.value = false }
-}
 
 // --- 設定の編集 ---
 const settingValue  = ref<string | number | null>(null)
@@ -60,21 +32,17 @@ const settingSaving = ref(false)
 const settingError  = ref('')
 
 function initSettingEdit() {
-  if (staff.value?.employmentType === 'FULL_TIME') {
-    settingValue.value = staff.value.full_time_settings?.workpattern ?? ''
-  } else {
-    settingValue.value = staff.value?.part_time_settings?.hourlywage ?? null
-  }
+  settingValue.value = staff.value?.part_time_settings?.hourlywage ?? null
   settingError.value = ''
 }
 
 async function saveSetting() {
   settingSaving.value = true; settingError.value = ''
   try {
-    const body = staff.value?.employmentType === 'FULL_TIME'
-      ? { workpattern: settingValue.value as string }
-      : { hourlywage: Number(settingValue.value) }
-    await $fetch(`/api/staff/${userId}/settings`, { method: 'PATCH', body })
+    await $fetch(`/api/staff/${userId}/settings`, {
+      method: 'PATCH',
+      body: { hourlywage: Number(settingValue.value) },
+    })
     await refreshStaff()
   } catch (e: unknown) {
     settingError.value = (e as { statusMessage?: string })?.statusMessage ?? '更新に失敗しました'
@@ -142,10 +110,6 @@ const employmentLabel: Record<EmploymentType, string> = {
   FULL_TIME: '社員',
 }
 
-const roleLabel: Record<string, string> = {
-  SUPER_ADMIN: '本社管理者', SHOP_ADMIN: '店長', STAFF: 'スタッフ',
-}
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -157,9 +121,6 @@ function formatDate(iso: string) {
   <div class="mx-auto max-w-2xl p-8">
 
     <header class="mb-8">
-      <NuxtLink to="/admin/staff" class="mb-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:underline">
-        <ArrowLeftIcon class="h-3.5 w-3.5" />スタッフ一覧へ戻る
-      </NuxtLink>
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-2xl font-bold text-slate-800">{{ staff?.name ?? '—' }}</h1>
@@ -171,9 +132,6 @@ function formatDate(iso: string) {
             <span class="text-xs text-slate-400">ID: {{ userId }}</span>
           </div>
         </div>
-        <NuxtLink :to="`/login/${userId}`"
-          class="rounded-lg border border-brand px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand hover:text-white"
-        >ログインページ</NuxtLink>
       </div>
     </header>
 
@@ -182,53 +140,36 @@ function formatDate(iso: string) {
       <div class="border-b border-slate-100 px-6 py-3">
         <h2 class="text-sm font-semibold text-slate-700">基本情報</h2>
       </div>
-      <dl class="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3">
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">スタッフID</dt>
-          <dd class="mt-1 font-mono text-sm font-semibold text-slate-800">{{ staff?.id }}</dd>
+      <dl class="divide-y divide-slate-100">
+        <div class="flex items-center justify-between px-6 py-3">
+          <dt class="text-sm text-slate-500">スタッフID</dt>
+          <dd class="font-mono text-sm font-medium text-slate-800">{{ staff?.id }}</dd>
         </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="mb-1 text-xs text-slate-400">雇用形態</dt>
+        <div class="flex items-center justify-between px-6 py-3">
+          <dt class="text-sm text-slate-500">雇用形態</dt>
           <dd>
-            <div v-if="!editingEmployment" class="flex items-center gap-2">
-              <span class="text-sm font-semibold text-slate-800">
-                {{ staff?.employmentType ? employmentLabel[staff.employmentType] : '—' }}
-              </span>
-              <button class="text-xs text-brand hover:underline" @click="startEdit">変更</button>
-            </div>
-            <div v-else class="space-y-1.5">
-              <select v-model="newEmploymentType" class="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-brand focus:outline-none">
-                <option value="PART_TIME">アルバイト</option>
-                <option value="FULL_TIME">社員</option>
-              </select>
-              <p v-if="saveError" class="text-xs text-rose-600">{{ saveError }}</p>
-              <div class="flex gap-1">
-                <button class="rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-50" :disabled="saving" @click="saveEmploymentType">{{ saving ? '保存中…' : '保存' }}</button>
-                <button class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-50" @click="cancelEdit">取消</button>
-              </div>
-            </div>
+            <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+              :class="staff?.employmentType === 'FULL_TIME' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'">
+              {{ staff?.employmentType ? employmentLabel[staff.employmentType] : '—' }}
+            </span>
           </dd>
         </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">権限</dt>
-          <dd class="mt-1 text-sm font-semibold text-slate-800">{{ staff?.role ? roleLabel[staff.role] ?? staff.role : '—' }}</dd>
+        <div class="flex items-center justify-between px-6 py-3">
+          <dt class="text-sm text-slate-500">所属店舗</dt>
+          <dd class="text-sm font-medium text-slate-800">{{ shopName }}</dd>
         </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">所属店舗</dt>
-          <dd class="mt-1 text-sm text-slate-800">{{ shopName }}</dd>
-        </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">在籍状態</dt>
-          <dd class="mt-1">
+        <div class="flex items-center justify-between px-6 py-3">
+          <dt class="text-sm text-slate-500">在籍状態</dt>
+          <dd>
             <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
               :class="staff?.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'">
               {{ staff?.isActive ? '在籍中' : '退職済み' }}
             </span>
           </dd>
         </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">登録日</dt>
-          <dd class="mt-1 text-sm text-slate-800">{{ staff?.createdAt ? formatDate(staff.createdAt) : '—' }}</dd>
+        <div class="flex items-center justify-between px-6 py-3">
+          <dt class="text-sm text-slate-500">登録日</dt>
+          <dd class="text-sm text-slate-800">{{ staff?.createdAt ? formatDate(staff.createdAt) : '—' }}</dd>
         </div>
       </dl>
     </section>

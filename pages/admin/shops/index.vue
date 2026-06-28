@@ -87,42 +87,31 @@ function formatDate(iso: string) {
     </section>
 
     <!-- 一覧 -->
-    <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
-      <p v-if="pending" class="px-6 py-10 text-center text-sm text-slate-400">読み込み中…</p>
-      <p v-else-if="shops.length === 0" class="px-6 py-10 text-center text-sm text-slate-400">
-        店舗がまだ登録されていません
-      </p>
-      <table v-else class="w-full text-left text-sm">
-        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-          <tr>
-            <th class="px-6 py-3">店舗名</th>
-            <th class="px-6 py-3 text-center">スタッフ数</th>
-            <th class="px-6 py-3">登録日</th>
-            <th class="px-6 py-3 text-right">操作</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          <tr v-for="shop in shops" :key="shop.id" class="hover:bg-slate-50">
-            <td class="px-6 py-4">
-              <div class="flex items-center gap-2">
-                <BuildingStorefrontIcon class="h-4 w-4 text-slate-400" />
-                <span class="font-medium text-slate-800">{{ shop.name }}</span>
-              </div>
-            </td>
-            <td class="px-6 py-4 text-center text-slate-600">{{ shop.staffCount }} 名</td>
-            <td class="px-6 py-4 text-slate-500">{{ formatDate(shop.createdAt) }}</td>
-            <td class="px-6 py-4 text-right">
-              <NuxtLink
-                :to="`/admin/shops/${shop.id}`"
-                class="inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline"
-              >
-                詳細<ArrowRightIcon class="h-3.5 w-3.5" />
-              </NuxtLink>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+    <p v-if="pending" class="py-10 text-center text-sm text-slate-400">読み込み中…</p>
+    <p v-else-if="shops.length === 0" class="py-10 text-center text-sm text-slate-400">
+      店舗がまだ登録されていません
+    </p>
+    <ul v-else class="space-y-3">
+      <li v-for="shop in shops" :key="shop.id">
+        <NuxtLink
+          :to="`/admin/shops/${shop.id}`"
+          class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm transition hover:border-brand hover:shadow-md"
+        >
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
+              <BuildingStorefrontIcon class="h-5 w-5 text-slate-500" />
+            </div>
+            <div>
+              <p class="font-semibold text-slate-800">{{ shop.name }}</p>
+              <p class="mt-0.5 text-xs text-slate-400">
+                {{ shop.staffCount }} 名 ・ {{ formatDate(shop.createdAt) }}
+              </p>
+            </div>
+          </div>
+          <ArrowRightIcon class="h-4 w-4 shrink-0 text-slate-300" />
+        </NuxtLink>
+      </li>
+    </ul>
 
   </div>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarDaysIcon, UsersIcon, ArrowLeftIcon, ChartBarIcon, TagIcon } from '@heroicons/vue/24/outline'
+import { CalendarDaysIcon, UsersIcon, ChartBarIcon, TagIcon } from '@heroicons/vue/24/outline'
 const route  = useRoute()
 const shopId = computed(() => route.params.shopId as string)
 
@@ -43,15 +43,11 @@ const navItems = computed(() => [
 <template>
   <div class="flex min-h-screen">
 
-    <!-- サイドバー -->
-    <aside class="fixed inset-y-0 left-0 z-20 flex w-56 flex-col border-r border-slate-200 bg-white">
-
-      <!-- 店舗名 -->
+    <!-- デスクトップ：左サイドバー -->
+    <aside class="fixed inset-y-0 left-0 z-20 hidden w-56 flex-col border-r border-slate-200 bg-white lg:flex">
       <div class="border-b border-slate-100 px-5 py-5">
         <p class="truncate text-sm font-bold text-slate-800">{{ shopName }}</p>
       </div>
-
-      <!-- ナビゲーション -->
       <nav class="flex-1 space-y-1 px-3 py-4">
         <NuxtLink
           v-for="item in navItems"
@@ -66,24 +62,26 @@ const navItems = computed(() => [
           {{ item.label }}
         </NuxtLink>
       </nav>
-
-      <!-- 下部リンク -->
-      <div class="border-t border-slate-100 px-3 py-4">
-        <button
-          class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-          @click="navigateTo('/')"
-        >
-          <ArrowLeftIcon class="h-4 w-4 shrink-0" />
-          トップへ戻る
-        </button>
-      </div>
-
     </aside>
 
     <!-- メインコンテンツ -->
-    <div class="ml-56 min-h-screen flex-1 bg-slate-50">
+    <div class="min-h-screen w-full bg-slate-50 pb-16 lg:ml-56 lg:pb-0">
       <slot />
     </div>
+
+    <!-- モバイル：下部タブバー -->
+    <nav class="fixed bottom-0 left-0 right-0 z-20 flex border-t border-slate-200 bg-white lg:hidden">
+      <NuxtLink
+        v-for="item in navItems"
+        :key="item.to"
+        :to="item.to"
+        class="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs font-medium transition-colors"
+        :class="item.active ? 'text-brand' : 'text-slate-400'"
+      >
+        <component :is="item.icon" class="h-5 w-5" />
+        <span>{{ item.label }}</span>
+      </NuxtLink>
+    </nav>
 
   </div>
 </template>

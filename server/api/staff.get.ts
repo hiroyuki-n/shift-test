@@ -10,8 +10,7 @@ export default defineEventHandler(async (event) => {
   // スタッフ基本情報
   const { data: users, error } = await client
     .from('users')
-    .select('id, name, employmentType, role, primaryShopId, createdAt')
-    .eq('role', 'STAFF')
+    .select('id, name, employmentType, primaryShopId, createdAt')
     .order('id', { ascending: true })
 
   if (error) throw createError({ statusCode: 500, statusMessage: error.message })
@@ -21,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const userIds = users.map(u => u.id)
 
   const [{ data: ftSettings }, { data: ptSettings }] = await Promise.all([
-    client.from('full_time_settings').select('userId, workpattern').in('userId', userIds),
+    client.from('full_time_settings').select('userId').in('userId', userIds),
     client.from('part_time_settings').select('userId, hourlywage').in('userId', userIds),
   ])
 

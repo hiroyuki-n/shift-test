@@ -1,6 +1,5 @@
 <script setup lang="ts">
 interface CurrentUser {
-  id: number; name: string; role: string
   employmentType: string | null; primaryShopId: number | null
 }
 interface ShiftRequest {

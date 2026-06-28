@@ -3,7 +3,6 @@ type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 type DayStatus   = 'confirmed' | 'pending' | 'rejected'
 
 interface CurrentUser {
-  id: number; name: string; role: string
   employmentType: string | null; primaryShopId: number | null
 }
 interface ShiftRequest {

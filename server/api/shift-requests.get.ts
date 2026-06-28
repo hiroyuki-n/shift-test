@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
 
   let query = client
     .from('shift_requests')
-    .select('id, date, startTime, endTime, status, note, userId, shopId, users(name, employmentType, role)')
+    .select('id, date, startTime, endTime, status, note, userId, shopId, users(name, employmentType)')
     .order('date', { ascending: true })
 
   if (userId) query = query.eq('userId', userId)

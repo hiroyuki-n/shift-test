@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const client = await serverSupabaseClient(event)
   const { data: user, error } = await client
     .from('users')
-    .select('id, name, role, employmentType, primaryShopId')
+    .select('id, name, employmentType, primaryShopId')
     .eq('id', userId)
     .maybeSingle()
 
