@@ -21,7 +21,8 @@ interface Request {
 const props = defineProps<{ shifts: Shift[]; requests?: Request[]; date: string }>()
 
 const emit = defineEmits<{
-  requestClick: [id: number, status: ShiftStatus]
+  requestClick:    [id: number, status: ShiftStatus]
+  finalShiftClick: [id: number]
 }>()
 
 // --- 色設定（確定シフト：単一色） ---
@@ -134,10 +135,13 @@ function renderEventContent(arg: EventContentArg) {
 }
 
 // --- クリックハンドラー ---
-function handleEventClick(info: { event: { extendedProps: Record<string, unknown> } }) {
+function handleEventClick(info: { event: { id: string; extendedProps: Record<string, unknown> } }) {
   const { type, requestId, status } = info.event.extendedProps
   if (type === 'request') {
     emit('requestClick', requestId as number, status as ShiftStatus)
+  } else if (type === 'final' || type === 'final-allday') {
+    const id = Number(info.event.id.replace('final-', ''))
+    emit('finalShiftClick', id)
   }
 }
 
@@ -164,5 +168,13 @@ const calendarOptions = computed(() => ({
 </script>
 
 <template>
-  <FullCalendar :options="calendarOptions" />
+  <div class="h-[420px] overflow-y-auto lg:h-auto lg:overflow-visible">
+    <FullCalendar :options="calendarOptions" />
+  </div>
 </template>
+
+<style>
+.fc-timegrid-slot-label {
+  font-size: 14px !important;
+}
+</style>

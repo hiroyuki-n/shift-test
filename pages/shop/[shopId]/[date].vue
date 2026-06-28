@@ -97,7 +97,7 @@ async function updateStatus(id: number, status: ShiftStatus) {
   }
 }
 
-// --- カレンダークリック時のポップアップ ---
+// --- リクエストクリックポップアップ ---
 const popupRequest = ref<ShiftRequest | null>(null);
 
 function onCalendarRequestClick(id: number) {
@@ -105,6 +105,34 @@ function onCalendarRequestClick(id: number) {
 }
 function closePopup() {
   popupRequest.value = null;
+}
+
+// --- 確定シフトのポジション変更ポップアップ ---
+const popupShift     = ref<FinalShift | null>(null)
+const popupPosition  = ref<number | null>(null)
+const positionSaving = ref(false)
+
+function onCalendarFinalShiftClick(id: number) {
+  const shift = shifts.value.find(s => s.id === id) ?? null
+  popupShift.value    = shift
+  popupPosition.value = shift?.positionId ?? (shopPositions.value[0]?.id ?? null)
+}
+function closeFinalPopup() { popupShift.value = null }
+
+async function saveFinalShiftPosition() {
+  if (!popupShift.value) return
+  positionSaving.value = true
+  try {
+    await $fetch(`/api/final-shifts/${popupShift.value.id}`, {
+      method: 'PATCH',
+      body: { positionId: popupPosition.value },
+    })
+    closeFinalPopup()
+    timelineMounted.value = false
+    await refreshShifts()
+    await nextTick()
+    timelineMounted.value = true
+  } finally { positionSaving.value = false }
 }
 
 const pendingCount = computed(() => requests.value.filter((r) => r.status === "PENDING").length);
@@ -235,7 +263,14 @@ const dateLabel = computed(() =>
       <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 class="mb-3 text-sm font-semibold text-slate-700">タイムライン</h2>
         <ClientOnly>
-          <ShiftTimeline v-if="timelineMounted" :shifts="shifts" :requests="isConfirmed ? [] : requests" :date="date" @request-click="onCalendarRequestClick" />
+          <ShiftTimeline
+              v-if="timelineMounted"
+              :shifts="shifts"
+              :requests="isConfirmed ? [] : requests"
+              :date="date"
+              @request-click="onCalendarRequestClick"
+              @final-shift-click="onCalendarFinalShiftClick"
+            />
           <div v-else class="flex h-64 items-center justify-center text-sm text-slate-400">更新中…</div>
           <template #fallback>
             <div class="py-16 text-center text-sm text-slate-400">読み込み中…</div>
@@ -348,6 +383,46 @@ const dateLabel = computed(() =>
       </div>
     </div>
 
+    <!-- 確定シフト ポジション変更ポップアップ -->
+    <Teleport to="body">
+      <div
+        v-if="popupShift"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+        @click.self="closeFinalPopup"
+      >
+        <div class="w-full max-w-xs rounded-xl bg-white shadow-xl">
+          <div class="border-b border-slate-100 px-5 py-4">
+            <p class="font-semibold text-slate-800">{{ popupShift.users?.name ?? '—' }}</p>
+            <p class="mt-0.5 text-sm text-slate-500">
+              {{ popupShift.users?.employmentType === 'FULL_TIME' ? '終日' : `${formatTime(popupShift.startTime)}〜${formatTime(popupShift.endTime)}` }}
+            </p>
+          </div>
+          <div class="p-4">
+            <label class="mb-4 block">
+              <span class="mb-1 block text-xs font-medium text-slate-600">ポジション</span>
+              <select
+                v-model="popupPosition"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              >
+                <option v-for="p in shopPositions" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+            </label>
+            <div class="flex gap-2">
+              <button
+                class="flex-1 rounded-lg bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                :disabled="positionSaving"
+                @click="saveFinalShiftPosition"
+              >{{ positionSaving ? '保存中…' : '保存する' }}</button>
+              <button
+                class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
+                @click="closeFinalPopup"
+              >キャンセル</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- カレンダークリック ポップアップ -->
     <Teleport to="body">
       <div v-if="popupRequest" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" @click.self="closePopup">
@@ -358,6 +433,16 @@ const dateLabel = computed(() =>
             <span class="mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="STATUS_CONFIG[popupRequest.status].badge">{{ STATUS_CONFIG[popupRequest.status].label }}</span>
           </div>
           <div class="p-4">
+            <!-- ポジション選択 -->
+            <div v-if="shopPositions.length > 0" class="mb-3">
+              <select
+                v-model="positionMap[popupRequest.id]"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              >
+                <option v-for="p in shopPositions" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+            </div>
+            <!-- ステータスボタン -->
             <div class="mb-3 flex gap-2">
               <button
                 v-for="(cfg, key) in STATUS_CONFIG"
@@ -366,9 +451,7 @@ const dateLabel = computed(() =>
                 :class="popupRequest.status === key ? cfg.badge + ' ring-2 ring-offset-1 ring-current' : 'bg-slate-100 text-slate-400 hover:text-slate-600'"
                 :disabled="updatingId === popupRequest.id"
                 @click="updateStatus(popupRequest.id, key as ShiftStatus)"
-              >
-                {{ cfg.label }}
-              </button>
+              >{{ cfg.label }}</button>
             </div>
             <button class="w-full rounded-lg py-2 text-sm text-slate-400 hover:text-slate-600" @click="closePopup">キャンセル</button>
           </div>
