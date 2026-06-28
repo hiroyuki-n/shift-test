@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
 
   // 雇用形態に応じた設定テーブルに初期レコードを作成
   const settingsTable = employmentType === 'FULL_TIME' ? 'full_time_settings' : 'part_time_settings'
-  await client.from(settingsTable).insert({ userid: data.id })
+  await client.from(settingsTable).insert({ userId: data.id })
 
   return data
 })

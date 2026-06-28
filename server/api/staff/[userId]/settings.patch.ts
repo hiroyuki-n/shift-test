@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
 
   const { data, error } = await client
     .from(table)
-    .upsert({ userid: Number(userId), ...updates })
+    .upsert({ userId: Number(userId), ...updates })
     .select()
     .single()
 

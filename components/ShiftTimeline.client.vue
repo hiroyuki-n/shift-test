@@ -8,8 +8,9 @@ type Position    = 'HALL' | 'KITCHEN' | 'CASHIER' | 'MANAGER' | 'OTHER'
 type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 interface Shift {
-  id: number; startTime: string; endTime: string
-  position: Position; users: { name: string } | null
+  id: number; startTime: string; endTime: string; date: string
+  position: Position
+  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
 }
 interface Request {
   id: number; startTime: string; endTime: string
@@ -33,53 +34,112 @@ const positionColors: Record<Position, { bg: string; border: string; text: strin
   MANAGER: { bg: '#f3e8ff', border: '#a855f7', text: '#6b21a8' },
   OTHER:   { bg: '#f1f5f9', border: '#94a3b8', text: '#475569' },
 }
-// 色付き（入れる）とグレー（保留）の2色
-type RequestColorConfig = { bg: string; border: string; text: string; dashed: boolean } | null
-const requestColors: Record<ShiftStatus, RequestColorConfig> = {
-  PENDING:  { bg: '#f1f5f9', border: '#94a3b8', text: '#64748b', dashed: true  }, // グレー
-  APPROVED: { bg: '#dbeafe', border: '#6366f1', text: '#3730a3', dashed: false }, // 色付き（インディゴ）
-  REJECTED: null, // 外す → 非表示
+const requestColors: Record<ShiftStatus, { bg: string; border: string; text: string; dashed: boolean } | null> = {
+  PENDING:  { bg: '#f1f5f9', border: '#94a3b8', text: '#64748b', dashed: true  },
+  APPROVED: { bg: '#dbeafe', border: '#6366f1', text: '#3730a3', dashed: false },
+  REJECTED: null,
 }
 
 // --- events 構築 ---
 function buildEvents(): EventInput[] {
-  return [
-    ...props.shifts.map(s => ({
-      id:              `final-${s.id}`,
-      title:           s.users?.name ?? '—',
-      start:           s.startTime,
-      end:             s.endTime,
-      backgroundColor: positionColors[s.position].bg,
-      borderColor:     positionColors[s.position].border,
-      textColor:       positionColors[s.position].text,
-      extendedProps:   { type: 'final' },
-    })),
-    ...(props.requests ?? []).flatMap(r => {
-      const c = requestColors[r.status]
-      if (!c) return []
-      return [{
-        id:              `req-${r.id}`,
-        title:           r.users?.name ?? '—',
-        start:           r.startTime,
-        end:             r.endTime,
-        backgroundColor: c.bg,
-        borderColor:     c.border,
-        textColor:       c.text,
-        extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed },
-      }]
-    }),
-  ]
+  const events: EventInput[] = []
+
+  for (const s of props.shifts) {
+    const isFullTime = s.users?.employmentType === 'FULL_TIME'
+
+    if (isFullTime) {
+      // 社員 → 終日行（allDay）
+      events.push({
+        id:              `final-${s.id}`,
+        title:           s.users?.name ?? '—',
+        start:           s.date,
+        allDay:          true,
+        backgroundColor: '#e0e7ff',
+        borderColor:     '#6366f1',
+        textColor:       '#3730a3',
+        extendedProps:   { type: 'final-allday' },
+      })
+    } else {
+      // アルバイト → 時間ブロック
+      events.push({
+        id:              `final-${s.id}`,
+        title:           s.users?.name ?? '—',
+        start:           s.startTime,
+        end:             s.endTime,
+        backgroundColor: positionColors[s.position].bg,
+        borderColor:     positionColors[s.position].border,
+        textColor:       positionColors[s.position].text,
+        extendedProps:   { type: 'final', label: positionLabel[s.position] },
+      })
+    }
+  }
+
+  for (const r of (props.requests ?? [])) {
+    const c = requestColors[r.status]
+    if (!c) continue
+    events.push({
+      id:              `req-${r.id}`,
+      title:           r.users?.name ?? '—',
+      start:           r.startTime,
+      end:             r.endTime,
+      backgroundColor: c.bg,
+      borderColor:     c.border,
+      textColor:       c.text,
+      extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed },
+    })
+  }
+
+  return events
 }
 
-// 親の v-if により常に最新の props で初期化されるため computed 不要だが、
-// props へのリアクティブ参照を明示するため computed のまま維持
+// --- イベント描画 ---
+function renderEventContent(arg: EventContentArg) {
+  const { type, dashed } = arg.event.extendedProps
+
+  // 社員の終日イベント
+  if (type === 'final-allday') {
+    return {
+      html: `
+        <div style="padding:2px 6px; font-size:11px; font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
+          ${arg.event.title}
+        </div>`,
+    }
+  }
+
+  // アルバイト・希望シフト
+  const borderStyle = dashed ? 'dashed' : 'solid'
+  const label = arg.event.extendedProps.label ?? ''
+  return {
+    html: `
+      <div style="
+        padding: 2px 4px; overflow: hidden; height: 100%; font-size: 11px; line-height: 1.4;
+        border-left: 3px ${borderStyle} ${arg.event.borderColor};
+      ">
+        <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          ${arg.event.title}
+        </div>
+        <div style="opacity:0.8;">${arg.timeText}</div>
+        ${label ? `<div style="opacity:0.7;">${label}</div>` : ''}
+      </div>`,
+  }
+}
+
+// --- クリックハンドラー ---
+function handleEventClick(info: { event: { extendedProps: Record<string, unknown> } }) {
+  const { type, requestId, status } = info.event.extendedProps
+  if (type === 'request') {
+    emit('requestClick', requestId as number, status as ShiftStatus)
+  }
+}
+
 const calendarOptions = computed(() => ({
   plugins:           [timeGridPlugin],
   initialView:       'timeGridDay',
   initialDate:       props.date,
   locale:            jaLocale,
   headerToolbar:     false,
-  allDaySlot:        false,
+  allDaySlot:        true,
+  allDayText:        '終日',
   slotMinTime:       '08:00:00',
   slotMaxTime:       '22:00:00',
   slotDuration:      '00:30:00',
@@ -92,31 +152,6 @@ const calendarOptions = computed(() => ({
   eventCursor:       'pointer',
   slotLabelFormat:   { hour: '2-digit', minute: '2-digit', hour12: false },
 }))
-
-// --- イベント描画 ---
-function renderEventContent(arg: EventContentArg) {
-  const dashed = arg.event.extendedProps.dashed === true
-  return {
-    html: `
-      <div style="
-        padding: 2px 4px; overflow: hidden; height: 100%; font-size: 11px; line-height: 1.4;
-        border-left: 3px ${dashed ? 'dashed' : 'solid'} ${arg.event.borderColor};
-      ">
-        <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-          ${arg.event.title}
-        </div>
-        <div style="opacity:0.8;">${arg.timeText}</div>
-      </div>`,
-  }
-}
-
-// --- クリックハンドラー ---
-function handleEventClick(info: { event: { extendedProps: Record<string, unknown> } }) {
-  const { type, requestId, status } = info.event.extendedProps
-  if (type === 'request') {
-    emit('requestClick', requestId as number, status as ShiftStatus)
-  }
-}
 </script>
 
 <template>

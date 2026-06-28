@@ -1,23 +1,36 @@
 import { serverSupabaseClient } from '#supabase/server'
 
 /**
- * スタッフ一覧取得API（STAFF ロールのユーザー）
+ * スタッフ一覧取得API（STAFF ロール）
  * GET /api/staff
- *
- * 認証導入前の暫定として、スタッフ画面の「閲覧スタッフ選択」に使用する。
  */
 export default defineEventHandler(async (event) => {
   const client = await serverSupabaseClient(event)
 
-  const { data, error } = await client
+  // スタッフ基本情報
+  const { data: users, error } = await client
     .from('users')
-    .select('id, name, employmentType, role, primaryShopId, createdAt, full_time_settings(workpattern), part_time_settings(hourlywage)')
+    .select('id, name, employmentType, role, primaryShopId, createdAt')
     .eq('role', 'STAFF')
     .order('id', { ascending: true })
 
-  if (error) {
-    throw createError({ statusCode: 500, statusMessage: error.message })
-  }
+  if (error) throw createError({ statusCode: 500, statusMessage: error.message })
+  if (!users?.length) return []
 
-  return data ?? []
+  // 設定テーブルを別取得してマージ
+  const userIds = users.map(u => u.id)
+
+  const [{ data: ftSettings }, { data: ptSettings }] = await Promise.all([
+    client.from('full_time_settings').select('userId, workpattern').in('userId', userIds),
+    client.from('part_time_settings').select('userId, hourlywage').in('userId', userIds),
+  ])
+
+  const ftMap = new Map((ftSettings ?? []).map(s => [s.userId, s]))
+  const ptMap = new Map((ptSettings ?? []).map(s => [s.userId, s]))
+
+  return users.map(u => ({
+    ...u,
+    full_time_settings: ftMap.get(u.id) ?? null,
+    part_time_settings: ptMap.get(u.id) ?? null,
+  }))
 })

@@ -8,7 +8,7 @@ type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 interface FinalShift {
   id: number; date: string; startTime: string; endTime: string
   position: Position; userId: number; shopId: number
-  users: { name: string } | null
+  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
 }
 
 interface ShiftRequest {

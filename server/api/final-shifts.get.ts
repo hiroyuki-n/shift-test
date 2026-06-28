@@ -6,11 +6,12 @@ import { serverSupabaseClient } from '#supabase/server'
  * GET /api/final-shifts?shopId=...&month=YYYY-MM → 店舗の月別シフト（users.name付き）
  */
 export default defineEventHandler(async (event) => {
-  const { userId, shopId, month, date } = getQuery(event) as {
+  const { userId, shopId, month, date, year } = getQuery(event) as {
     userId?: string
     shopId?: string
     month?: string
     date?: string
+    year?: string
   }
 
   if (!userId && !shopId) return []
@@ -19,7 +20,7 @@ export default defineEventHandler(async (event) => {
 
   let query = client
     .from('final_shifts')
-    .select('id, date, startTime, endTime, position, userId, shopId, users!final_shifts_userId_fkey(name), shops(name)')
+    .select('id, date, startTime, endTime, position, userId, shopId, hourlywage, users!final_shifts_userId_fkey(name, employmentType), shops(name)')
     .order('date', { ascending: true })
     .order('startTime', { ascending: true })
 
@@ -33,6 +34,8 @@ export default defineEventHandler(async (event) => {
     const startDate = `${month}-01`
     const endDate = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
     query = query.gte('date', startDate).lte('date', endDate)
+  } else if (year) {
+    query = query.gte('date', `${year}-01-01`).lte('date', `${year}-12-31`)
   }
 
   const { data, error } = await query

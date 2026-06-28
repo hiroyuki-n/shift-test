@@ -67,16 +67,8 @@ function formatDate(value: string) {
 <template>
   <div class="mx-auto max-w-5xl p-8">
       <!-- ヘッダー -->
-      <header class="mb-8 flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold text-slate-800">本社管理ダッシュボード</h1>
-        </div>
-        <button
-          class="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark"
-          @click="showForm = !showForm"
-        >
-          <PlusIcon class="h-4 w-4" />店舗を追加
-        </button>
+      <header class="mb-8">
+        <h1 class="text-2xl font-bold text-slate-800">本社管理ダッシュボード</h1>
       </header>
 
       <!-- KPIカード -->

@@ -4,6 +4,8 @@ import { serverSupabaseClient } from '#supabase/server'
  * 確定シフト 作成API
  * POST /api/final-shifts
  *   body: { date, startTime, endTime, position, userId, shopId }
+ *
+ * アルバイトの場合、確定時点の時給を hourlywage に記録する
  */
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
@@ -22,6 +24,16 @@ export default defineEventHandler(async (event) => {
   }
 
   const client = await serverSupabaseClient(event)
+
+  // アルバイトの場合、現時点の時給を取得して記録
+  const { data: settings } = await client
+    .from('part_time_settings')
+    .select('hourlywage')
+    .eq('userId', userId)
+    .maybeSingle()
+
+  const hourlywage = settings?.hourlywage ?? null
+
   const { data, error } = await client
     .from('final_shifts')
     .insert({
@@ -31,9 +43,10 @@ export default defineEventHandler(async (event) => {
       position,
       userId,
       shopId,
+      hourlywage,
       updatedAt: new Date().toISOString(),
     })
-    .select('id, date, startTime, endTime, position, userId, shopId')
+    .select('id, date, startTime, endTime, position, userId, shopId, hourlywage')
     .single()
 
   if (error) throw createError({ statusCode: 500, statusMessage: error.message })

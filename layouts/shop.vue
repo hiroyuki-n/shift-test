@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarDaysIcon, UsersIcon, ArrowLeftIcon, ChartBarIcon } from '@heroicons/vue/24/outline'
+import { CalendarDaysIcon, UsersIcon, ArrowLeftIcon, ChartBarIcon, TagIcon } from '@heroicons/vue/24/outline'
 const route  = useRoute()
 const shopId = computed(() => route.params.shopId as string)
 
@@ -30,6 +30,12 @@ const navItems = computed(() => [
     to: `/shop/${shopId.value}/staff`,
     icon: UsersIcon,
     active: route.path.startsWith(`/shop/${shopId.value}/staff`),
+  },
+  {
+    label: 'ポジション',
+    to: `/shop/${shopId.value}/positions`,
+    icon: TagIcon,
+    active: route.path === `/shop/${shopId.value}/positions`,
   },
 ])
 </script>
