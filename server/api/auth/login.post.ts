@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'IDまたはパスワードが正しくありません' })
   }
 
-  setSession(event, user.id)
+  setSession(event, String(user.id))
 
   return {
     id: user.id,
