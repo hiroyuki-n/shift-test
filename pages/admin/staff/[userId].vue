@@ -233,49 +233,27 @@ function formatDate(iso: string) {
       </dl>
     </section>
 
-    <!-- 雇用形態別設定 -->
-    <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+    <!-- アルバイト設定（時給） -->
+    <section v-if="staff?.employmentType === 'PART_TIME'" class="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-100 px-6 py-3">
-        <h2 class="text-sm font-semibold text-slate-700">
-          {{ staff?.employmentType === 'FULL_TIME' ? '社員設定' : 'アルバイト設定' }}
-        </h2>
+        <h2 class="text-sm font-semibold text-slate-700">アルバイト設定</h2>
       </div>
       <div class="px-6 py-5">
-
-        <!-- アルバイト：時給 -->
-        <template v-if="staff?.employmentType === 'PART_TIME'">
-          <label class="block">
-            <span class="mb-1 block text-xs font-medium text-slate-500">時給（円）</span>
-            <div class="flex items-center gap-2">
-              <input
-                v-model.number="settingValue"
-                type="number"
-                min="0"
-                placeholder="例: 1100"
-                class="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-                @focus="initSettingEdit"
-              />
-              <span class="text-sm text-slate-500">円 / 時</span>
-            </div>
-          </label>
-          <p class="mt-1 text-xs text-slate-400">現在: {{ staff.part_time_settings?.hourlywage != null ? `${staff.part_time_settings.hourlywage} 円` : '未設定' }}</p>
-        </template>
-
-        <!-- 社員：勤務パターン -->
-        <template v-else-if="staff?.employmentType === 'FULL_TIME'">
-          <label class="block">
-            <span class="mb-1 block text-xs font-medium text-slate-500">勤務パターン</span>
+        <label class="block">
+          <span class="mb-1 block text-xs font-medium text-slate-500">時給（円）</span>
+          <div class="flex items-center gap-2">
             <input
-              v-model="settingValue"
-              type="text"
-              placeholder="例: 9:00〜18:00 / 週5日"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              v-model.number="settingValue"
+              type="number"
+              min="0"
+              placeholder="例: 1100"
+              class="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
               @focus="initSettingEdit"
             />
-          </label>
-          <p class="mt-1 text-xs text-slate-400">現在: {{ staff.full_time_settings?.workpattern ?? '未設定' }}</p>
-        </template>
-
+            <span class="text-sm text-slate-500">円 / 時</span>
+          </div>
+        </label>
+        <p class="mt-1 text-xs text-slate-400">現在: {{ staff.part_time_settings?.hourlywage != null ? `${staff.part_time_settings.hourlywage} 円` : '未設定' }}</p>
         <p v-if="settingError" class="mt-2 text-xs text-rose-600">{{ settingError }}</p>
         <button
           class="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"

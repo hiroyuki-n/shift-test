@@ -34,8 +34,9 @@ const staffByShop = computed(() => {
         <h1 class="text-3xl font-bold text-slate-800">シフト管理システム</h1>
       </header>
 
-      <div class="mb-6 flex justify-end">
-        <NuxtLink to="/admin" class="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"> 管理画面へ </NuxtLink>
+      <div class="mb-6 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
+        <span class="text-lg font-semibold text-slate-800">管理画面</span>
+        <NuxtLink to="/admin" class="rounded-lg border border-brand px-3 py-1 text-xs font-semibold text-brand hover:bg-brand hover:text-white transition">ログイン</NuxtLink>
       </div>
 
       <div class="space-y-6">

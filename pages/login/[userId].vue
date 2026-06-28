@@ -38,7 +38,9 @@ async function login() {
       method: 'POST',
       body: { userId: userId.value, password: password.value },
     })
-    const dest = result.employmentType === 'FULL_TIME' ? '/full-time' : '/part-time'
+    const dest = result.employmentType === 'FULL_TIME'
+      ? `/full-time/${userId.value}`
+      : `/part-time/${userId.value}`
     await navigateTo(dest)
   } catch (e: unknown) {
     loginError.value =

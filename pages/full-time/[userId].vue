@@ -10,13 +10,21 @@ interface FinalShift {
   id: number; date: string; startTime: string; endTime: string; shopId: number
 }
 
-const { data: me } = await useFetch<CurrentUser | null>('/api/auth/me')
-const userId = computed(() => me.value?.id ?? '')
+const route = useRoute()
+const routeUserId = route.params.userId as string
 
-// 社員以外はリダイレクト
-if (me.value && me.value.employmentType !== 'FULL_TIME') {
-  await navigateTo('/part-time', { replace: true })
+const { data: me } = await useFetch<CurrentUser | null>('/api/auth/me')
+
+// 未ログイン or 本人以外はトップへ
+if (!me.value || String(me.value.id) !== routeUserId) {
+  await navigateTo('/', { replace: true })
 }
+// 社員以外はpart-timeへ
+if (me.value && me.value.employmentType !== 'FULL_TIME') {
+  await navigateTo(`/part-time/${routeUserId}`, { replace: true })
+}
+
+const userId = routeUserId
 
 const today = new Date()
 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -77,12 +85,12 @@ const calendarCells = computed(() => {
 const submitting = ref<string | null>(null)
 
 async function submitAttendance(dateStr: string) {
-  if (!userId.value) return
+  if (!userId) return
   submitting.value = dateStr
   try {
     await $fetch('/api/shift-requests', {
       method: 'POST',
-      body: { userId: userId.value, date: dateStr, startTime: '09:00', endTime: '18:00' },
+      body: { userId: userId, date: dateStr, startTime: '09:00', endTime: '18:00' },
     })
     await refreshRequests()
   } finally { submitting.value = null }
@@ -107,8 +115,8 @@ async function logout() {
 // Realtime
 const supabase = useSupabaseClient()
 onMounted(() => {
-  if (!userId.value) return
-  const channel = supabase.channel(`ft-${userId.value}`)
+  if (!userId) return
+  const channel = supabase.channel(`ft-`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'final_shifts' }, async () => { await refreshFinalShifts() })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'final_shifts' }, async () => { await refreshFinalShifts() })
     .subscribe()

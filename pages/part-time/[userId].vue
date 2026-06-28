@@ -15,13 +15,21 @@ interface FinalShift {
   shops: { name: string } | null
 }
 
-const { data: me } = await useFetch<CurrentUser | null>('/api/auth/me')
-const userId = computed(() => me.value?.id ?? '')
+const route = useRoute()
+const routeUserId = route.params.userId as string
 
-// 社員はリダイレクト
-if (me.value && me.value.employmentType !== 'PART_TIME') {
-  await navigateTo('/full-time', { replace: true })
+const { data: me } = await useFetch<CurrentUser | null>('/api/auth/me')
+
+// 未ログイン or 本人以外はトップへ
+if (!me.value || String(me.value.id) !== routeUserId) {
+  await navigateTo('/', { replace: true })
 }
+// 社員はfull-timeへ
+if (me.value && me.value.employmentType !== 'PART_TIME') {
+  await navigateTo(`/full-time/${routeUserId}`, { replace: true })
+}
+
+const userId = routeUserId
 
 const today = new Date()
 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -128,12 +136,12 @@ watch(() => form.startTime, v => {
 })
 
 async function submitShift(start: string, end: string) {
-  if (!selectedDate.value || !userId.value) return
+  if (!selectedDate.value) return
   submitting.value = true; formError.value = ''
   try {
     await $fetch('/api/shift-requests', {
       method: 'POST',
-      body: { userId: userId.value, date: selectedDate.value, startTime: start, endTime: end },
+      body: { userId, date: selectedDate.value, startTime: start, endTime: end },
     })
     await refreshRequests(); closeModal()
   } catch (e: unknown) {
@@ -155,8 +163,7 @@ async function logout() {
 // Realtime
 const supabase = useSupabaseClient()
 onMounted(() => {
-  if (!userId.value) return
-  const channel = supabase.channel(`pt-${userId.value}`)
+  const channel = supabase.channel(`pt-${userId}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'final_shifts' }, async () => { await refreshFinalShifts() })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'final_shifts' }, async () => { await refreshFinalShifts() })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shift_requests' }, async () => { await refreshRequests() })
