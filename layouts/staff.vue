@@ -7,10 +7,17 @@ const userId = computed(() => route.params.userId as string)
 const isFullTime = computed(() => route.path.startsWith('/full-time'))
 const base       = computed(() => isFullTime.value ? `/full-time/${userId.value}` : `/part-time/${userId.value}`)
 
-const { data: staff } = await useFetch<{ name: string; employmentType: string | null } | null>(
+const { data: staff } = await useFetch<{ name: string; employmentType: string | null; primaryShopId: number | null } | null>(
   () => `/api/staff/${userId.value}`,
   { default: () => null },
 )
+
+const { data: shopData } = await useFetch<{ shop: { name: string } } | null>(
+  () => staff.value?.primaryShopId ? `/api/shops/${staff.value.primaryShopId}` : null,
+  { default: () => null },
+)
+
+const shopName = computed(() => shopData.value?.shop?.name ?? '')
 
 const navItems = computed(() => [
   {
@@ -36,6 +43,7 @@ const navItems = computed(() => [
       <div class="border-b border-slate-100 px-4 py-4">
         <p class="truncate text-sm font-bold text-slate-800">{{ staff?.name ?? '…' }}</p>
         <p class="mt-0.5 text-xs text-slate-400">{{ staff?.employmentType === 'FULL_TIME' ? '社員' : 'アルバイト' }}</p>
+        <p v-if="shopName" class="mt-0.5 truncate text-xs text-slate-500">{{ shopName }}</p>
       </div>
       <nav class="flex-1 space-y-1 px-3 py-4">
         <NuxtLink

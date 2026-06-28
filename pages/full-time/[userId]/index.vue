@@ -2,7 +2,7 @@
 definePageMeta({ layout: 'staff' })
 
 interface CurrentUser {
-  employmentType: string | null; primaryShopId: number | null
+  id: number; employmentType: string | null; primaryShopId: number | null; name: string
 }
 interface ShiftRequest {
   id: number; date: string; startTime: string; endTime: string; status: string; shopId: number
@@ -11,16 +11,14 @@ interface FinalShift {
   id: number; date: string; startTime: string; endTime: string; shopId: number
 }
 
-const route = useRoute()
+const route       = useRoute()
 const routeUserId = route.params.userId as string
 
 const { data: me } = await useFetch<CurrentUser | null>('/api/auth/me')
 
-// 未ログイン or 本人以外はトップへ
 if (!me.value || String(me.value.id) !== routeUserId) {
   await navigateTo('/', { replace: true })
 }
-// 社員以外はpart-timeへ
 if (me.value && me.value.employmentType !== 'FULL_TIME') {
   await navigateTo(`/part-time/${routeUserId}`, { replace: true })
 }
@@ -55,55 +53,52 @@ const { data: myFinalShifts, refresh: refreshFinalShifts } = await useFetch<Fina
   { query: { userId, month: currentMonth }, default: () => [] },
 )
 
-// 日別状態マップ
-const dayStatusMap = computed(() => {
-  const map = new Map<string, 'confirmed' | 'pending' | 'absent'>()
-  for (const f of myFinalShifts.value) map.set(f.date, 'confirmed')
-  for (const r of myRequests.value) {
-    if (!map.has(r.date)) {
-      map.set(r.date, r.status === 'REJECTED' ? 'absent' : 'pending')
-    }
-  }
-  return map
+// 月の全日リスト生成
+const dayList = computed(() => {
+  const [y, m] = currentMonth.value.split('-').map(Number)
+  const lastDate = new Date(y, m, 0).getDate()
+  return Array.from({ length: lastDate }, (_, i) => {
+    const d = i + 1
+    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const date    = new Date(y, m - 1, d)
+    const dayOfWeek = date.getDay() // 0=日, 6=土
+    const req   = myRequests.value.find(r => r.date === dateStr)
+    const final = myFinalShifts.value.find(f => f.date === dateStr)
+    const status = final ? 'confirmed' : req ? (req.status === 'REJECTED' ? 'absent' : 'pending') : null
+    return { d, dateStr, dayOfWeek, isToday: dateStr === todayStr, status, reqId: req?.id ?? null }
+  })
 })
 
-const weekDayLabels = ['月', '火', '水', '木', '金', '土', '日']
-const calendarCells = computed(() => {
-  const [y, m] = currentMonth.value.split('-').map(Number)
-  const firstDay = new Date(y, m - 1, 1)
-  const lastDate = new Date(y, m, 0).getDate()
-  const startOffset = (firstDay.getDay() + 6) % 7
-  const cells: Array<{ day: number; dateStr: string; status: string | null; isToday: boolean } | null> = []
-  for (let i = 0; i < startOffset; i++) cells.push(null)
-  for (let d = 1; d <= lastDate; d++) {
-    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    cells.push({ day: d, dateStr, status: dayStatusMap.value.get(dateStr) ?? null, isToday: dateStr === todayStr })
-  }
-  return cells
-})
+const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
 // 出勤提出
 const submitting = ref<string | null>(null)
 
 async function submitAttendance(dateStr: string) {
-  if (!userId) return
   submitting.value = dateStr
   try {
     await $fetch('/api/shift-requests', {
       method: 'POST',
-      body: { userId: userId, date: dateStr, startTime: '09:00', endTime: '18:00' },
+      body: { userId, date: dateStr, startTime: '09:00', endTime: '18:00' },
     })
     await refreshRequests()
   } finally { submitting.value = null }
 }
 
-// 欠勤（提出済みを削除）
-async function markAbsent(dateStr: string) {
-  const req = myRequests.value.find(r => r.date === dateStr)
-  if (!req) return
+async function markAbsent(dateStr: string, reqId: number | null) {
   submitting.value = dateStr
   try {
-    await $fetch(`/api/shift-requests/${req.id}`, { method: 'PATCH', body: { status: 'REJECTED' } })
+    if (reqId) {
+      // 既存リクエストをREJECTEDに変更
+      await $fetch(`/api/shift-requests/${reqId}`, { method: 'PATCH', body: { status: 'REJECTED' } })
+    } else {
+      // 未提出 → 休みリクエストを新規作成してREJECTEDに設定
+      const { id } = await $fetch<{ id: number }>('/api/shift-requests', {
+        method: 'POST',
+        body: { userId, date: dateStr, startTime: '09:00', endTime: '18:00' },
+      })
+      await $fetch(`/api/shift-requests/${id}`, { method: 'PATCH', body: { status: 'REJECTED' } })
+    }
     await refreshRequests()
   } finally { submitting.value = null }
 }
@@ -116,8 +111,7 @@ async function logout() {
 // Realtime
 const supabase = useSupabaseClient()
 onMounted(() => {
-  if (!userId) return
-  const channel = supabase.channel(`ft-`)
+  const channel = supabase.channel(`ft-${userId}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'final_shifts' }, async () => { await refreshFinalShifts() })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'final_shifts' }, async () => { await refreshFinalShifts() })
     .subscribe()
@@ -127,7 +121,7 @@ onMounted(() => {
 
 <template>
   <main class="min-h-screen bg-slate-50 p-4 sm:p-6">
-    <div class="mx-auto max-w-2xl">
+    <div class="mx-auto max-w-xl">
 
       <div v-if="!me" class="mt-12 rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <h1 class="text-xl font-bold text-slate-800">ログインが必要です</h1>
@@ -143,84 +137,77 @@ onMounted(() => {
           <button class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="logout">ログアウト</button>
         </header>
 
+        <!-- 月ナビ -->
+        <div class="mb-4 flex items-center justify-between">
+          <button class="rounded px-2 py-1 text-sm text-slate-500 hover:bg-slate-100" @click="prevMonth">‹ 前月</button>
+          <span class="text-sm font-semibold text-slate-700">{{ monthLabel }}</span>
+          <button class="rounded px-2 py-1 text-sm text-slate-500 hover:bg-slate-100" @click="nextMonth">翌月 ›</button>
+        </div>
+
+        <!-- 日別リスト -->
         <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <!-- 月ナビ -->
-          <div class="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-            <button class="rounded px-2 py-1 text-sm text-slate-500 hover:bg-slate-100" @click="prevMonth">‹ 前月</button>
-            <span class="text-sm font-semibold text-slate-700">{{ monthLabel }}</span>
-            <button class="rounded px-2 py-1 text-sm text-slate-500 hover:bg-slate-100" @click="nextMonth">翌月 ›</button>
-          </div>
-
-          <!-- 凡例 -->
-          <div class="flex gap-4 px-5 py-2 text-xs text-slate-500">
-            <span class="flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-emerald-400" />確定</span>
-            <span class="flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-amber-400" />申請中</span>
-            <span class="flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-rose-400" />休み</span>
-            <span class="flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-slate-200" />未提出</span>
-          </div>
-
-          <!-- カレンダー -->
-          <div class="px-4 pb-4">
-            <div class="grid grid-cols-7">
-              <div
-                v-for="(label, i) in weekDayLabels" :key="label"
-                class="py-1.5 text-center text-xs font-semibold"
-                :class="i === 5 ? 'text-blue-500' : i === 6 ? 'text-rose-500' : 'text-slate-400'"
-              >{{ label }}</div>
-            </div>
-            <div class="grid grid-cols-7 gap-1">
-              <div v-for="(cell, i) in calendarCells" :key="i">
-                <div v-if="!cell" class="h-20" />
-                <div
-                  v-else
-                  class="h-20 rounded-lg border p-1.5 flex flex-col"
+          <ul class="divide-y divide-slate-100">
+            <li
+              v-for="day in dayList"
+              :key="day.dateStr"
+              class="flex items-center gap-3 px-4 py-2.5"
+              :class="[
+                day.dayOfWeek === 0 ? 'bg-rose-50/50' : day.dayOfWeek === 6 ? 'bg-blue-50/50' : '',
+                day.isToday ? 'bg-brand/5' : '',
+              ]"
+            >
+              <!-- 日付・曜日 -->
+              <div class="w-14 shrink-0 flex items-center gap-1">
+                <span
+                  class="text-sm font-semibold"
                   :class="[
-                    cell.isToday ? 'border-brand' : 'border-slate-100',
-                    cell.status === 'confirmed' ? 'bg-emerald-50'
-                    : cell.status === 'pending'   ? 'bg-amber-50'
-                    : cell.status === 'absent'    ? 'bg-rose-50'
-                    : 'bg-white'
+                    day.isToday        ? 'text-brand'
+                    : day.dayOfWeek === 0 ? 'text-rose-500'
+                    : day.dayOfWeek === 6 ? 'text-blue-500'
+                    : 'text-slate-700'
                   ]"
-                >
-                  <p class="mb-1 text-right text-xs font-semibold" :class="cell.isToday ? 'text-brand' : 'text-slate-500'">{{ cell.day }}</p>
-
-                  <!-- 確定済み -->
-                  <div v-if="cell.status === 'confirmed'" class="flex flex-1 items-center justify-center">
-                    <span class="rounded-full bg-emerald-400 px-2 py-0.5 text-xs font-bold text-white">確定</span>
-                  </div>
-
-                  <!-- 申請中 -->
-                  <div v-else-if="cell.status === 'pending'" class="flex flex-1 flex-col items-center justify-center gap-1">
-                    <span class="rounded-full bg-amber-400 px-2 py-0.5 text-xs font-bold text-white">申請中</span>
-                    <button
-                      class="text-xs text-slate-400 hover:text-rose-500 transition"
-                      :disabled="submitting === cell.dateStr"
-                      @click="markAbsent(cell.dateStr)"
-                    >取消</button>
-                  </div>
-
-                  <!-- 休み -->
-                  <div v-else-if="cell.status === 'absent'" class="flex flex-1 items-center justify-center">
-                    <span class="rounded-full bg-rose-400 px-2 py-0.5 text-xs font-bold text-white">休み</span>
-                  </div>
-
-                  <!-- 未提出 -->
-                  <div v-else class="flex flex-1 gap-1">
-                    <button
-                      class="flex-1 rounded text-xs font-semibold transition bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-50"
-                      :disabled="submitting === cell.dateStr"
-                      @click="submitAttendance(cell.dateStr)"
-                    >出勤</button>
-                    <button
-                      class="flex-1 rounded text-xs font-semibold transition bg-slate-100 text-slate-500 hover:bg-slate-200"
-                      disabled
-                    >欠勤</button>
-                  </div>
-                </div>
+                >{{ day.d }}</span>
+                <span
+                  class="text-xs"
+                  :class="[
+                    day.dayOfWeek === 0 ? 'text-rose-400'
+                    : day.dayOfWeek === 6 ? 'text-blue-400'
+                    : 'text-slate-400'
+                  ]"
+                >{{ DAY_LABELS[day.dayOfWeek] }}</span>
               </div>
-            </div>
-          </div>
+
+              <!-- ステータス / ボタン -->
+              <div class="flex flex-1 items-center justify-end gap-1.5">
+
+                <!-- 確定 -->
+                <span v-if="day.status === 'confirmed'" class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">確定</span>
+
+                <!-- 出勤・休みボタン（確定以外は常に表示） -->
+                <template v-else>
+                  <button
+                    class="rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
+                    :class="day.status === 'pending'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-slate-100 text-slate-400 hover:text-slate-600'"
+                    :disabled="submitting === day.dateStr || day.status === 'pending'"
+                    @click="submitAttendance(day.dateStr)"
+                  >出勤</button>
+                  <button
+                    class="rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
+                    :class="day.status === 'absent'
+                      ? 'bg-rose-100 text-rose-600'
+                      : 'bg-slate-100 text-slate-400 hover:text-slate-600'"
+                    :disabled="submitting === day.dateStr || day.status === 'absent'"
+                    @click="markAbsent(day.dateStr, day.reqId)"
+                  >休み</button>
+                </template>
+
+              </div>
+            </li>
+          </ul>
         </section>
+
       </template>
     </div>
   </main>
