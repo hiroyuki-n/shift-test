@@ -7,7 +7,10 @@ import { Buffer } from 'node:buffer'
  * 保存形式: pbkdf2$<iterations>$<saltBase64>$<hashBase64>
  */
 
-const ITERATIONS = 210_000
+// Cloudflare Workers の Web Crypto は PBKDF2 の反復回数を 100,000 までに制限している
+// （超えると "Pbkdf2 failed: iteration counts above 100000 are not supported" で失敗する）。
+// ハッシュは pbkdf2$<iterations>$... と自己記述形式のため、保存済みハッシュも同じ上限内である必要がある。
+const ITERATIONS = 100_000
 const KEY_BYTES = 32
 
 async function derive(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
