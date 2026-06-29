@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
     endTime?: string
     breakMinutes?: number | null
     overtimeMinutes?: number | null
-    note?: string | null
+    isAbsent?: boolean
   }>(event)
 
   const client = await serverSupabaseClient(event)
@@ -21,9 +21,17 @@ export default defineEventHandler(async (event) => {
   if (body.endTime && body.date) {
     updates.endTime = new Date(`${body.date}T${body.endTime}:00+09:00`).toISOString()
   }
-  if ('breakMinutes'    in body) updates.breakMinutes    = body.breakMinutes    ?? null
-  if ('overtimeMinutes' in body) updates.overtimeMinutes = body.overtimeMinutes ?? null
-  if ('note'            in body) updates.note            = (body.note ?? '').trim() || null
+  if ('isAbsent' in body) {
+    updates.isAbsent = body.isAbsent ?? false
+    if (body.isAbsent) {
+      updates.startTime = null
+      updates.endTime   = null
+      updates.breakMinutes    = null
+      updates.overtimeMinutes = null
+    }
+  }
+  if (!body.isAbsent && 'breakMinutes'    in body) updates.breakMinutes    = body.breakMinutes    ?? null
+  if (!body.isAbsent && 'overtimeMinutes' in body) updates.overtimeMinutes = body.overtimeMinutes ?? null
 
   const { error } = await client
     .from('attendance_records')
