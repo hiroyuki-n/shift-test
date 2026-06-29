@@ -2,17 +2,6 @@
 type EmploymentType = 'PART_TIME' | 'FULL_TIME'
 type ShiftStatus    = 'PENDING' | 'APPROVED' | 'REJECTED'
 
-interface Staff {
-  id: number
-  name: string
-  employmentType: EmploymentType | null
-}
-
-interface ShopDetail {
-  shop: { id: number; name: string; createdAt: string }
-  staff: Staff[]
-}
-
 interface FinalShift {
   id: number
   date: string
@@ -48,7 +37,7 @@ const currentMonth = ref(
   `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`,
 )
 
-const { data, pending, error } = await useFetch<ShopDetail>(
+const { pending, error } = await useFetch(
   () => `/api/shops/${shopId.value}`,
 )
 
