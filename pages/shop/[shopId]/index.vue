@@ -1,67 +1,21 @@
 <script setup lang="ts">
-type EmploymentType = 'PART_TIME' | 'FULL_TIME'
-type ShiftStatus    = 'PENDING' | 'APPROVED' | 'REJECTED'
-
-interface Staff {
-  id: number
-  name: string
-  employmentType: EmploymentType | null
-}
-
-interface ShopDetail {
-  shop: { id: number; name: string; createdAt: string }
-  staff: Staff[]
-}
-
-interface FinalShift {
-  id: number
-  date: string
-  startTime: string
-  endTime: string
-  positionId: number | null
-  userId: number
-  shopId: number
-  users: { name: string } | null
-  shop_positions: { name: string } | null
-}
-
-interface ShiftRequest {
-  id: number
-  date: string
-  startTime: string
-  endTime: string
-  status: ShiftStatus
-  note: string | null
-  userId: number
-  shopId: number
-  users: { name: string; employmentType: EmploymentType | null } | null
-}
-
 definePageMeta({ layout: 'shop' })
+
+type EmploymentType = 'PART_TIME' | 'FULL_TIME'
+
+interface Staff { id: number; name: string; employmentType: EmploymentType | null }
+interface ShopDetail { shop: { id: number; name: string }; staff: Staff[] }
+interface FinalShift {
+  id: number; date: string; startTime: string; endTime: string
+  userId: number; shopId: number
+}
 
 const route  = useRoute()
 const shopId = computed(() => route.params.shopId as string)
 
 const today = new Date()
-const currentMonth = ref(
-  `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`,
-)
+const currentMonth = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
 
-const { data, pending, error } = await useFetch<ShopDetail>(
-  () => `/api/shops/${shopId.value}`,
-)
-
-const { data: shifts } = await useFetch<FinalShift[]>('/api/final-shifts', {
-  query: { shopId, month: currentMonth },
-  default: () => [],
-})
-
-const { data: requests } = await useFetch<ShiftRequest[]>('/api/shift-requests', {
-  query: { shopId, month: currentMonth },
-  default: () => [],
-})
-
-// --- 月ナビゲーション ---
 function prevMonth() {
   const [y, m] = currentMonth.value.split('-').map(Number)
   const d = new Date(y, m - 2, 1)
@@ -72,189 +26,156 @@ function nextMonth() {
   const d = new Date(y, m, 1)
   currentMonth.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
-
 const monthLabel = computed(() => {
   const [y, m] = currentMonth.value.split('-').map(Number)
   return `${y}年${m}月`
 })
 
-const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-const weekDayLabels = ['月', '火', '水', '木', '金', '土', '日']
-
-// --- カレンダー日付生成（月曜始まり） ---
-const calendarCells = computed(() => {
-  const [y, m] = currentMonth.value.split('-').map(Number)
-  const firstDay  = new Date(y, m - 1, 1)
-  const lastDate  = new Date(y, m, 0).getDate()
-  const startOffset = (firstDay.getDay() + 6) % 7
-  const cells: Array<{ day: number; dateStr: string; shifts: FinalShift[] } | null> = []
-  for (let i = 0; i < startOffset; i++) cells.push(null)
-  for (let d = 1; d <= lastDate; d++) {
-    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    cells.push({ day: d, dateStr, shifts: shifts.value.filter(s => s.date === dateStr) })
-  }
-  return cells
+const { data: shopData } = await useFetch<ShopDetail>(
+  () => `/api/shops/${shopId.value}`,
+)
+const { data: finalShifts } = await useFetch<FinalShift[]>('/api/final-shifts', {
+  query: { shopId, month: currentMonth },
+  default: () => [],
 })
 
+// 月の総日数・平日数
+const monthStats = computed(() => {
+  const [y, m] = currentMonth.value.split('-').map(Number)
+  const daysInMonth = new Date(y, m, 0).getDate()
+  let weekdays = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    const day = new Date(y, m - 1, d).getDay()
+    if (day !== 0 && day !== 6) weekdays++
+  }
+  return { daysInMonth, weekdays }
+})
 
-function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+// UTC+9 で分に変換
+function toJSTMinutes(iso: string): number {
+  const d = new Date(iso)
+  return (d.getUTCHours() * 60 + d.getUTCMinutes() + 540) % 1440
+}
+function durationHours(s: string, e: string): number {
+  return (toJSTMinutes(e) - toJSTMinutes(s)) / 60
 }
 
-// --- 日別の確定・未確定集計 ---
-// 保留（PENDING）が1件でもある日は「未確定」として扱う
-interface DayStats { confirmed: number; pending: number }
+// スタッフ別稼働集計
+const staffStats = computed(() => {
+  const staff = shopData.value?.staff ?? []
+  const { daysInMonth, weekdays } = monthStats.value
 
-const dayStatsMap = computed(() => {
-  const map = new Map<string, DayStats>()
-  const get = (d: string) => map.get(d) ?? { confirmed: 0, pending: 0 }
-  for (const s of shifts.value) {
-    const e = get(s.date); e.confirmed++; map.set(s.date, e)
-  }
-  for (const r of requests.value) {
-    if (r.status === 'PENDING') {
-      const e = get(r.date); e.pending++; map.set(r.date, e)
+  return staff.map(s => {
+    const shifts = finalShifts.value.filter(f => f.userId === s.id)
+    const workedDays = new Set(shifts.map(f => f.date)).size
+    const totalHours = shifts.reduce((sum, f) => sum + durationHours(f.startTime, f.endTime), 0)
+    const target = s.employmentType === 'FULL_TIME' ? weekdays : daysInMonth
+    const rate = target > 0 ? (workedDays / target) * 100 : 0
+
+    return {
+      id: s.id,
+      name: s.name,
+      employmentType: s.employmentType,
+      workedDays,
+      totalHours: Math.round(totalHours * 10) / 10,
+      rate: Math.min(rate, 100),
     }
-  }
-  return map
+  }).sort((a, b) => b.rate - a.rate)
 })
 
-const statusCalendarCells = computed(() => {
-  const [y, m] = currentMonth.value.split('-').map(Number)
-  const firstDay    = new Date(y, m - 1, 1)
-  const lastDate    = new Date(y, m, 0).getDate()
-  const startOffset = (firstDay.getDay() + 6) % 7
-  const cells: Array<{ day: number; dateStr: string; stats: DayStats; isToday: boolean } | null> = []
-  for (let i = 0; i < startOffset; i++) cells.push(null)
-  for (let d = 1; d <= lastDate; d++) {
-    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    cells.push({
-      day: d, dateStr,
-      stats:   dayStatsMap.value.get(dateStr) ?? { confirmed: 0, pending: 0 },
-      isToday: dateStr === todayStr,
-    })
-  }
-  return cells
-})
+const totalHours = computed(() =>
+  Math.round(staffStats.value.reduce((s, v) => s + v.totalHours, 0) * 10) / 10,
+)
 
-function statusCellClass(stats: DayStats, isToday: boolean) {
-  if (isToday) return 'border-2 border-brand bg-white text-slate-700'
-  if (stats.pending > 0)   return 'bg-amber-200 text-amber-800 border-slate-100'
-  if (stats.confirmed > 0) return 'bg-emerald-200 text-emerald-800 border-slate-100'
-  return 'bg-slate-100 text-slate-400 border-slate-100'
+const employmentLabel: Record<EmploymentType, string> = {
+  PART_TIME: 'アルバイト',
+  FULL_TIME: '社員',
 }
-
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl p-8">
+  <div class="mx-auto max-w-4xl p-8">
 
-    <p v-if="pending" class="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
-      読み込み中…
-    </p>
-    <p v-else-if="error" class="rounded-xl border border-rose-200 bg-white p-8 text-center text-sm text-rose-600">
-      データの取得に失敗しました（{{ error.statusMessage || error.message }}）
-    </p>
+    <!-- ヘッダー -->
+    <div class="mb-6 flex items-center justify-between">
+      <h1 class="text-xl font-bold text-slate-800">ダッシュボード</h1>
+      <div class="flex items-center gap-2">
+        <button class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100" @click="prevMonth">‹ 前月</button>
+        <span class="text-sm font-semibold text-slate-700">{{ monthLabel }}</span>
+        <button class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100" @click="nextMonth">翌月 ›</button>
+      </div>
+    </div>
 
-    <template v-else>
+    <!-- サマリーカード -->
+    <div class="mb-6 grid grid-cols-2 gap-4">
+      <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p class="text-xs text-slate-400">スタッフ数</p>
+        <p class="mt-1 text-3xl font-bold text-slate-800">{{ staffStats.length }}</p>
+        <p class="mt-0.5 text-xs text-slate-400">名</p>
+      </div>
+      <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p class="text-xs text-slate-400">総勤務時間</p>
+        <p class="mt-1 text-3xl font-bold text-slate-800">{{ totalHours }}</p>
+        <p class="mt-0.5 text-xs text-slate-400">時間</p>
+      </div>
+    </div>
 
-      <!-- 月ナビゲーション（共通） -->
-      <div class="mb-6 flex items-center justify-between">
-        <h2 class="text-lg font-bold text-slate-800">{{ monthLabel }}</h2>
-        <div class="flex items-center gap-2">
-          <button
-            class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
-            @click="prevMonth"
-          >‹ 前月</button>
-          <button
-            class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
-            @click="nextMonth"
-          >翌月 ›</button>
+
+    <!-- 勤務時間グラフ -->
+    <section class="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-700">スタッフ別勤務時間</h2>
+        <div class="flex gap-3 text-xs text-slate-400">
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block h-2.5 w-2.5 rounded-sm bg-indigo-400" />社員
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-300" />アルバイト
+          </span>
         </div>
       </div>
+      <ClientOnly>
+        <StaffUtilizationChart :stats="staffStats" :days-in-month="monthStats.daysInMonth" />
+        <template #fallback>
+          <div class="h-40 animate-pulse rounded-xl bg-slate-100" />
+        </template>
+      </ClientOnly>
+    </section>
 
-      <!-- 確定状況カレンダー -->
-      <section class="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div class="flex items-center justify-between border-b border-slate-100 px-6 py-3">
-          <h3 class="text-sm font-semibold text-slate-700">確定状況</h3>
-          <div class="flex items-center gap-4 text-xs text-slate-500">
-            <span class="flex items-center gap-1.5">
-              <span class="inline-block h-3 w-5 rounded bg-emerald-200" />確定
-            </span>
-            <span class="flex items-center gap-1.5">
-              <span class="inline-block h-3 w-5 rounded bg-amber-200" />保留あり（未確定）
-            </span>
-            <span class="flex items-center gap-1.5">
-              <span class="inline-block h-3 w-5 rounded bg-slate-100" />データなし
-            </span>
-          </div>
-        </div>
-        <div class="p-4">
-          <div class="grid grid-cols-7">
-            <div
-              v-for="(label, i) in weekDayLabels" :key="label"
-              class="pb-1.5 text-center text-xs font-semibold"
-              :class="i === 5 ? 'text-blue-500' : i === 6 ? 'text-rose-500' : 'text-slate-400'"
-            >{{ label }}</div>
-          </div>
-          <div class="grid grid-cols-7 gap-0.5">
-            <div v-for="(cell, i) in statusCalendarCells" :key="i">
-              <button
-                v-if="cell"
-                class="flex h-10 w-full flex-col items-center justify-center rounded-md border transition hover:opacity-75"
-                :class="statusCellClass(cell.stats, cell.isToday)"
-                @click="navigateTo(`/shop/${shopId}/${cell.dateStr}`)"
-              >
-                <span class="text-xs font-medium leading-none" :class="cell.isToday ? 'text-brand' : ''">
-                  {{ cell.day }}
-                </span>
-              </button>
-              <div v-else class="h-10" />
-            </div>
-          </div>
-        </div>
-      </section>
+    <!-- スタッフ別詳細テーブル -->
+    <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-6 py-4">
+        <h2 class="text-sm font-semibold text-slate-700">スタッフ別詳細</h2>
+      </div>
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+          <tr>
+            <th class="px-6 py-3 text-left">氏名</th>
+            <th class="px-6 py-3 text-left">雇用形態</th>
+            <th class="px-6 py-3 text-right">出勤日数</th>
+            <th class="px-6 py-3 text-right">勤務時間</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr v-for="s in staffStats" :key="s.id" class="hover:bg-slate-50">
+            <td class="px-6 py-3 font-medium text-slate-800">{{ s.name }}</td>
+            <td class="px-6 py-3">
+              <span
+                class="rounded-full px-2 py-0.5 text-xs font-medium"
+                :class="s.employmentType === 'FULL_TIME' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'"
+              >{{ s.employmentType ? employmentLabel[s.employmentType] : '—' }}</span>
+            </td>
+            <td class="px-6 py-3 text-right text-slate-700">{{ s.workedDays }} 日</td>
+            <td class="px-6 py-3 text-right text-slate-700">{{ s.totalHours }} h</td>
+          </tr>
+          <tr v-if="staffStats.length === 0">
+            <td colspan="4" class="px-6 py-10 text-center text-sm text-slate-400">
+              この月の確定シフトはありません
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
-      <!-- シフト詳細カレンダー -->
-      <section class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div class="border-b border-slate-100 px-6 py-4">
-          <h2 class="text-lg font-semibold text-slate-800">シフトカレンダー</h2>
-        </div>
-        <div class="overflow-x-auto p-4">
-          <div class="grid grid-cols-7 gap-1">
-            <div
-              v-for="(label, i) in weekDayLabels" :key="label"
-              class="py-2 text-center text-xs font-semibold"
-              :class="i === 5 ? 'text-blue-500' : i === 6 ? 'text-rose-500' : 'text-slate-500'"
-            >{{ label }}</div>
-
-            <div
-              v-for="(cell, i) in calendarCells" :key="i"
-              class="min-h-24 rounded-lg border p-1.5"
-              :class="!cell ? 'border-transparent' : cell.dateStr === todayStr ? 'border-brand bg-brand/5' : 'border-slate-100 bg-white'"
-            >
-              <template v-if="cell">
-                <button
-                  class="mb-1 block w-full text-right text-xs font-semibold hover:underline"
-                  :class="cell.dateStr === todayStr ? 'text-brand' : 'text-slate-500'"
-                  @click="navigateTo(`/shop/${shopId}/${cell.dateStr}`)"
-                >{{ cell.day }}</button>
-                <ul class="space-y-0.5">
-                  <li
-                    v-for="shift in cell.shifts" :key="shift.id"
-                    class="rounded bg-blue-50 px-1 py-0.5 text-xs leading-tight text-blue-700"
-                  >
-                    <p class="font-medium">{{ shift.users?.name ?? '—' }}</p>
-                    <p class="opacity-75">{{ shift.shop_positions?.name ?? formatTime(shift.startTime) }}</p>
-                  </li>
-                </ul>
-              </template>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-    </template>
   </div>
 </template>

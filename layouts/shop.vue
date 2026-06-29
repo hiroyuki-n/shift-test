@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { CalendarDaysIcon, UsersIcon, ChartBarIcon, TagIcon } from '@heroicons/vue/24/outline'
+import { CalendarDaysIcon, UsersIcon, ChartBarIcon, TagIcon, ClipboardDocumentListIcon } from '@heroicons/vue/24/outline'
 const route  = useRoute()
 const shopId = computed(() => route.params.shopId as string)
+
 
 const { data: shopData } = await useFetch(
   () => `/api/shops/${shopId.value}`,
@@ -15,15 +16,15 @@ const datePattern = /^\/shop\/\d+\/\d{4}-\d{2}-\d{2}$/
 const navItems = computed(() => [
   {
     label: 'ダッシュボード',
-    to: `/shop/${shopId.value}/dashboard`,
+    to: `/shop/${shopId.value}`,
     icon: ChartBarIcon,
-    active: route.path === `/shop/${shopId.value}/dashboard`,
+    active: route.path === `/shop/${shopId.value}`,
   },
   {
     label: 'シフト',
-    to: `/shop/${shopId.value}`,
+    to: `/shop/${shopId.value}/shifts`,
     icon: CalendarDaysIcon,
-    active: route.path === `/shop/${shopId.value}` || datePattern.test(route.path),
+    active: route.path === `/shop/${shopId.value}/shifts` || datePattern.test(route.path),
   },
   {
     label: 'スタッフ',
@@ -36,6 +37,12 @@ const navItems = computed(() => [
     to: `/shop/${shopId.value}/positions`,
     icon: TagIcon,
     active: route.path === `/shop/${shopId.value}/positions`,
+  },
+  {
+    label: '勤怠記録',
+    to: `/shop/${shopId.value}/attendance`,
+    icon: ClipboardDocumentListIcon,
+    active: route.path.startsWith(`/shop/${shopId.value}/attendance`),
   },
 ])
 </script>
