@@ -99,15 +99,28 @@ const timeOptions: string[] = (() => {
   return opts
 })()
 
+function requestRange(reqId: number): { start: string; end: string } {
+  const req = requests.value.find(r => r.id === reqId)
+  return req
+    ? { start: formatTime(req.startTime), end: formatTime(req.endTime) }
+    : { start: '08:00', end: '22:00' }
+}
+
+function startTimeOptions(reqId: number): string[] {
+  const { start, end } = requestRange(reqId)
+  return timeOptions.filter(t => t >= start && t < end)
+}
+
 function endTimeOptions(reqId: number): string[] {
-  const start = shiftTimeMap.value[reqId]?.startTime ?? '08:00'
-  return timeOptions.filter(t => t > start)
+  const { end } = requestRange(reqId)
+  const selectedStart = shiftTimeMap.value[reqId]?.startTime ?? '08:00'
+  return timeOptions.filter(t => t > selectedStart && t <= end)
 }
 
 function onStartTimeChange(reqId: number) {
   const entry = shiftTimeMap.value[reqId]
   if (!entry) return
-  const opts = timeOptions.filter(t => t > entry.startTime)
+  const opts = endTimeOptions(reqId)
   if (opts.length && !opts.includes(entry.endTime)) entry.endTime = opts[0]
 }
 
@@ -124,15 +137,30 @@ async function updateStatus(id: number, status: ShiftStatus) {
   updatingId.value = id;
   try {
     await $fetch(`/api/shift-requests/${id}`, { method: "PATCH", body: { status } });
-    timelineMounted.value = false; // アンマウント
-    await refreshRequests(); // 最新データ取得
-    await nextTick(); // Vue の反映を待つ
-    timelineMounted.value = true; // 最新データで再マウント
+    // リストの順序を保つためローカルで status だけ更新（再フェッチしない）
+    const idx = requests.value.findIndex(r => r.id === id)
+    if (idx !== -1) requests.value[idx] = { ...requests.value[idx], status }
+    timelineMounted.value = false;
+    await nextTick();
+    timelineMounted.value = true;
   } finally {
     updatingId.value = null;
     popupRequest.value = null;
   }
 }
+
+// shiftTimeMap の調整時間をタイムラインに反映するための computed
+const adjustedRequests = computed(() =>
+  requests.value.map(r => {
+    const entry = shiftTimeMap.value[r.id]
+    if (!entry || r.users?.employmentType === 'FULL_TIME') return r
+    return {
+      ...r,
+      startTime: new Date(`${r.date}T${entry.startTime}:00+09:00`).toISOString(),
+      endTime:   new Date(`${r.date}T${entry.endTime}:00+09:00`).toISOString(),
+    }
+  })
+)
 
 // --- リクエストクリックポップアップ ---
 const popupRequest = ref<ShiftRequest | null>(null);
@@ -310,9 +338,10 @@ const dateLabel = computed(() =>
           <ShiftTimeline
               v-if="timelineMounted"
               :shifts="shifts"
-              :requests="isConfirmed ? [] : requests"
+              :requests="isConfirmed ? [] : adjustedRequests"
               :date="date"
               :current-shop-id="shopId"
+              :shop-names="Object.fromEntries(shopNameMap)"
               @request-click="onCalendarRequestClick"
               @final-shift-click="onCalendarFinalShiftClick"
             />
@@ -341,10 +370,14 @@ const dateLabel = computed(() =>
               <li
                 v-for="s in shifts.filter(s => s.users?.employmentType === 'FULL_TIME').sort((a, b) => (a.users?.name ?? '').localeCompare(b.users?.name ?? ''))"
                 :key="s.id"
-                class="flex items-center justify-between px-5 py-2.5"
+                class="flex items-center gap-2 px-5 py-2.5"
               >
-                <span class="text-sm font-medium text-slate-800">{{ s.users?.name ?? '—' }}</span>
-                <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">終日</span>
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ s.users?.name ?? '—' }}</span>
+                <span
+                  v-if="s.users?.primaryShopId && s.users.primaryShopId !== Number(shopId)"
+                  class="shrink-0 rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700"
+                >{{ shopNameMap.get(s.users.primaryShopId) ?? '他店' }}</span>
+                <span class="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">終日</span>
               </li>
               <li v-if="!shifts.some(s => s.users?.employmentType === 'FULL_TIME')" class="px-5 py-4 text-center text-sm text-slate-400">社員のシフトはありません</li>
             </ul>
@@ -366,6 +399,10 @@ const dateLabel = computed(() =>
               >
                 <span class="shrink-0 text-xs text-slate-500">{{ formatTime(s.startTime) }}〜{{ formatTime(s.endTime) }}</span>
                 <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ s.users?.name ?? '—' }}</span>
+                <span
+                  v-if="s.users?.primaryShopId && s.users.primaryShopId !== Number(shopId)"
+                  class="shrink-0 rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700"
+                >{{ shopNameMap.get(s.users.primaryShopId) ?? '他店' }}</span>
                 <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ s.shop_positions?.name ?? '—' }}</span>
               </li>
               <li v-if="!shifts.some(s => s.users?.employmentType !== 'FULL_TIME')" class="px-5 py-4 text-center text-sm text-slate-400">アルバイトのシフトはありません</li>
@@ -457,7 +494,7 @@ const dateLabel = computed(() =>
                     class="rounded border border-slate-300 px-1.5 py-0.5 text-xs focus:border-brand focus:outline-none"
                     @change="onStartTimeChange(req.id)"
                   >
-                    <option v-for="t in timeOptions" :key="t" :value="t">{{ t }}</option>
+                    <option v-for="t in startTimeOptions(req.id)" :key="t" :value="t">{{ t }}</option>
                   </select>
                   <span class="text-xs text-slate-400">〜</span>
                   <select
@@ -487,7 +524,7 @@ const dateLabel = computed(() =>
     <!-- 希望シフト（参照用・常時表示） -->
     <section class="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 class="mb-3 text-sm font-semibold text-slate-700">
-        希望シフト
+        この日の希望シフト
         <span class="ml-1.5 text-xs font-normal text-slate-400">参照用</span>
       </h2>
       <ClientOnly>
@@ -496,6 +533,7 @@ const dateLabel = computed(() =>
           :requests="requests"
           :date="date"
           :current-shop-id="shopId"
+          :shop-names="Object.fromEntries(shopNameMap)"
           :readonly="true"
         />
         <template #fallback>
@@ -563,7 +601,7 @@ const dateLabel = computed(() =>
                   class="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-brand focus:outline-none"
                   @change="onStartTimeChange(popupRequest.id)"
                 >
-                  <option v-for="t in timeOptions" :key="t" :value="t">{{ t }}</option>
+                  <option v-for="t in startTimeOptions(popupRequest.id)" :key="t" :value="t">{{ t }}</option>
                 </select>
                 <span class="text-sm text-slate-400">〜</span>
                 <select

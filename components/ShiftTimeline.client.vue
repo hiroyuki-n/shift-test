@@ -15,10 +15,10 @@ interface Shift {
 interface Request {
   id: number; startTime: string; endTime: string; date: string
   status: ShiftStatus
-  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
+  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null; primaryShopId: number | null } | null
 }
 
-const props = defineProps<{ shifts: Shift[]; requests?: Request[]; date: string; currentShopId?: number | string; readonly?: boolean }>()
+const props = defineProps<{ shifts: Shift[]; requests?: Request[]; date: string; currentShopId?: number | string; readonly?: boolean; shopNames?: Record<number, string> }>()
 
 const emit = defineEmits<{
   requestClick:    [id: number, status: ShiftStatus]
@@ -44,6 +44,9 @@ function buildEvents(): EventInput[] {
       && s.users?.primaryShopId !== null
       && s.users?.primaryShopId !== Number(props.currentShopId)
     const color = isOtherShop ? confirmedOtherColor : confirmedColor
+    const shopName = isOtherShop && s.users?.primaryShopId
+      ? (props.shopNames?.[s.users.primaryShopId] ?? '他店')
+      : null
 
     if (isFullTime) {
       events.push({
@@ -54,7 +57,7 @@ function buildEvents(): EventInput[] {
         backgroundColor: isOtherShop ? '#fef3c7' : '#e0e7ff',
         borderColor:     isOtherShop ? '#f59e0b' : '#6366f1',
         textColor:       isOtherShop ? '#92400e' : '#3730a3',
-        extendedProps:   { type: 'final-allday', isOtherShop },
+        extendedProps:   { type: 'final-allday', isOtherShop, shopName },
       })
     } else {
       events.push({
@@ -65,18 +68,24 @@ function buildEvents(): EventInput[] {
         backgroundColor: color.bg,
         borderColor:     color.border,
         textColor:       color.text,
-        extendedProps:   { type: 'final', label: s.shop_positions?.name ?? '', isOtherShop },
+        extendedProps:   { type: 'final', label: s.shop_positions?.name ?? '', isOtherShop, shopName },
       })
     }
   }
 
   for (const r of (props.requests ?? [])) {
-    const c = requestColors[r.status]
+    const c = props.readonly ? requestColors['PENDING'] : requestColors[r.status]
     if (!c) continue
     const isFullTime = r.users?.employmentType === 'FULL_TIME'
+    const isOtherShop = props.currentShopId !== undefined
+      && r.users?.primaryShopId !== null
+      && r.users?.primaryShopId !== undefined
+      && r.users?.primaryShopId !== Number(props.currentShopId)
+    const shopName = isOtherShop && r.users?.primaryShopId
+      ? (props.shopNames?.[r.users.primaryShopId] ?? '他店')
+      : null
 
     if (isFullTime) {
-      // 社員リクエスト → 終日行
       events.push({
         id:              `req-${r.id}`,
         title:           r.users?.name ?? '—',
@@ -85,10 +94,9 @@ function buildEvents(): EventInput[] {
         backgroundColor: c.bg,
         borderColor:     c.border,
         textColor:       c.text,
-        extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed },
+        extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed, shopName },
       })
     } else {
-      // アルバイトリクエスト → 時間ブロック
       events.push({
         id:              `req-${r.id}`,
         title:           r.users?.name ?? '—',
@@ -97,7 +105,7 @@ function buildEvents(): EventInput[] {
         backgroundColor: c.bg,
         borderColor:     c.border,
         textColor:       c.text,
-        extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed },
+        extendedProps:   { type: 'request', status: r.status, requestId: r.id, dashed: c.dashed, shopName },
       })
     }
   }
@@ -109,12 +117,14 @@ function buildEvents(): EventInput[] {
 function renderEventContent(arg: EventContentArg) {
   const { type, dashed } = arg.event.extendedProps
 
+  const shopName = arg.event.extendedProps.shopName as string | null
+
   // 社員の終日イベント
   if (type === 'final-allday') {
     return {
       html: `
         <div style="padding:2px 6px; font-size:11px; font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
-          ${arg.event.title}
+          ${arg.event.title}${shopName ? ` <span style="font-weight:400; opacity:0.75;">(${shopName})</span>` : ''}
         </div>`,
     }
   }
@@ -129,7 +139,7 @@ function renderEventContent(arg: EventContentArg) {
         border-left: 3px ${borderStyle} ${arg.event.borderColor};
       ">
         <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-          ${arg.event.title}
+          ${arg.event.title}${shopName ? ` <span style="font-weight:400; opacity:0.75;">(${shopName})</span>` : ''}
         </div>
         <div style="opacity:0.8;">${arg.timeText}</div>
         ${label ? `<div style="opacity:0.7;">${label}</div>` : ''}
