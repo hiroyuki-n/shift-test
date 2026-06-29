@@ -6,32 +6,36 @@ export default defineEventHandler(async (event) => {
     date?: string
     startTime?: string
     endTime?: string
-    breakMinutes?: number | null
+    breakStartTime?: string | null
+    breakEndTime?: string | null
     overtimeMinutes?: number | null
     isAbsent?: boolean
   }>(event)
 
   const client = await serverSupabaseClient(event)
 
+  const toISO = (d: string, t: string) => new Date(`${d}T${t}:00+09:00`).toISOString()
+
   const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() }
 
-  if (body.startTime && body.date) {
-    updates.startTime = new Date(`${body.date}T${body.startTime}:00+09:00`).toISOString()
-  }
-  if (body.endTime && body.date) {
-    updates.endTime = new Date(`${body.date}T${body.endTime}:00+09:00`).toISOString()
-  }
   if ('isAbsent' in body) {
     updates.isAbsent = body.isAbsent ?? false
     if (body.isAbsent) {
-      updates.startTime = null
-      updates.endTime   = null
-      updates.breakMinutes    = null
+      updates.startTime      = null
+      updates.endTime        = null
+      updates.breakStartTime = null
+      updates.breakEndTime   = null
       updates.overtimeMinutes = null
     }
   }
-  if (!body.isAbsent && 'breakMinutes'    in body) updates.breakMinutes    = body.breakMinutes    ?? null
-  if (!body.isAbsent && 'overtimeMinutes' in body) updates.overtimeMinutes = body.overtimeMinutes ?? null
+
+  if (!body.isAbsent && body.date) {
+    if (body.startTime) updates.startTime = toISO(body.date, body.startTime)
+    if (body.endTime)   updates.endTime   = toISO(body.date, body.endTime)
+    updates.breakStartTime = body.breakStartTime ? toISO(body.date, body.breakStartTime) : null
+    updates.breakEndTime   = body.breakEndTime   ? toISO(body.date, body.breakEndTime)   : null
+    if ('overtimeMinutes' in body) updates.overtimeMinutes = body.overtimeMinutes ?? null
+  }
 
   const { error } = await client
     .from('attendance_records')

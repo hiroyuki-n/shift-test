@@ -7,7 +7,8 @@ export default defineEventHandler(async (event) => {
     shopId?: number | string
     startTime?: string
     endTime?: string
-    breakMinutes?: number | null
+    breakStartTime?: string | null
+    breakEndTime?: string | null
     overtimeMinutes?: number | null
     isAbsent?: boolean
   }>(event)
@@ -20,6 +21,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: '出退勤時間が不足しています' })
   }
 
+  const toISO = (t: string) => new Date(`${date}T${t}:00+09:00`).toISOString()
+
   const client = await serverSupabaseClient(event)
 
   const { data, error } = await client
@@ -28,9 +31,10 @@ export default defineEventHandler(async (event) => {
       date,
       userId,
       shopId,
-      startTime: isAbsent ? null : new Date(`${date}T${startTime}:00+09:00`).toISOString(),
-      endTime:   isAbsent ? null : new Date(`${date}T${endTime}:00+09:00`).toISOString(),
-      breakMinutes:    isAbsent ? null : (body.breakMinutes    ?? null),
+      startTime:      isAbsent ? null : toISO(startTime!),
+      endTime:        isAbsent ? null : toISO(endTime!),
+      breakStartTime: isAbsent || !body.breakStartTime ? null : toISO(body.breakStartTime),
+      breakEndTime:   isAbsent || !body.breakEndTime   ? null : toISO(body.breakEndTime),
       overtimeMinutes: isAbsent ? null : (body.overtimeMinutes ?? null),
       isAbsent:        isAbsent ?? false,
       updatedAt:       new Date().toISOString(),

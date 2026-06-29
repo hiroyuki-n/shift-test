@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
 
   let query = client
     .from('attendance_records')
-    .select('id, date, userId, shopId, startTime, endTime, breakMinutes, overtimeMinutes, note, updatedAt, users(name, employmentType)')
+    .select('id, date, userId, shopId, startTime, endTime, breakStartTime, breakEndTime, overtimeMinutes, isAbsent, updatedAt, users(name, employmentType)')
     .order('date', { ascending: true })
 
   if (shopId) query = query.eq('shopId', shopId)

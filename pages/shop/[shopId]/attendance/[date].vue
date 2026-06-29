@@ -14,21 +14,20 @@ interface FinalShift {
 interface AttendanceRecord {
   id: number; date: string; userId: number; shopId: number
   startTime: string | null; endTime: string | null
-  breakMinutes: number | null; overtimeMinutes: number | null
-  isAbsent: boolean
+  breakStartTime: string | null; breakEndTime: string | null
+  overtimeMinutes: number | null; isAbsent: boolean
 }
 
 interface FormEntry {
   startTime: string; endTime: string
-  breakMinutes: string; overtimeMinutes: string
-  isAbsent: boolean
+  breakStartTime: string; breakEndTime: string
+  overtimeMinutes: string; isAbsent: boolean
 }
 
 const route  = useRoute()
 const shopId = route.params.shopId as string
 const date   = route.params.date as string
 
-// 日付ナビゲーション
 function offsetDate(d: string, days: number): string {
   const dt = new Date(`${d}T12:00:00+09:00`)
   dt.setDate(dt.getDate() + days)
@@ -41,25 +40,22 @@ const dateLabel = computed(() =>
   })
 )
 
-// データ取得
-const { data: finalShifts } = await useFetch<FinalShift[]>('/api/final-shifts', {
+const { data: finalShiftsRaw } = await useFetch<FinalShift[]>('/api/final-shifts', {
   query: { shopId, date }, default: () => [],
 })
 const { data: records, refresh: refreshRecords } = await useFetch<AttendanceRecord[]>('/api/attendance-records', {
   query: { shopId, date }, default: () => [],
 })
 
-// 時間ユーティリティ
+// 社員を除外
+const finalShifts = computed(() =>
+  finalShiftsRaw.value.filter(s => s.users?.employmentType !== 'FULL_TIME')
+)
+
 function formatTime(iso: string): string {
   const d = new Date(iso)
   const min = (d.getUTCHours() * 60 + d.getUTCMinutes() + 540) % 1440
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
-}
-
-function diffMinutes(shiftIso: string, actualTime: string, date: string): number {
-  const shift  = new Date(shiftIso).getTime()
-  const actual = new Date(`${date}T${actualTime}:00+09:00`).getTime()
-  return Math.round((actual - shift) / 60000)
 }
 
 // 30分刻みオプション（06:00〜24:00）
@@ -73,10 +69,8 @@ const timeOptions: string[] = (() => {
   return opts
 })()
 
-// フォーム状態（userId → FormEntry）
 const formMap = ref<Record<number, FormEntry>>({})
 
-// 確定シフトをベースにフォームを初期化
 watch(
   [finalShifts, records],
   () => {
@@ -85,108 +79,89 @@ watch(
       const rec = records.value.find(r => r.userId === s.userId)
       formMap.value[s.userId] = rec
         ? {
-            startTime:       rec.startTime ? formatTime(rec.startTime) : formatTime(s.startTime),
-            endTime:         rec.endTime   ? formatTime(rec.endTime)   : formatTime(s.endTime),
-            breakMinutes:    rec.breakMinutes    != null ? String(rec.breakMinutes)    : '',
+            startTime:      rec.startTime      ? formatTime(rec.startTime)      : formatTime(s.startTime),
+            endTime:        rec.endTime        ? formatTime(rec.endTime)        : formatTime(s.endTime),
+            breakStartTime: rec.breakStartTime ? formatTime(rec.breakStartTime) : '',
+            breakEndTime:   rec.breakEndTime   ? formatTime(rec.breakEndTime)   : '',
             overtimeMinutes: rec.overtimeMinutes != null ? String(rec.overtimeMinutes) : '',
-            isAbsent:        rec.isAbsent,
+            isAbsent: rec.isAbsent,
           }
         : {
-            startTime:       formatTime(s.startTime),
-            endTime:         formatTime(s.endTime),
-            breakMinutes:    '',
-            overtimeMinutes: '',
-            isAbsent:        false,
+            startTime: formatTime(s.startTime), endTime: formatTime(s.endTime),
+            breakStartTime: '', breakEndTime: '', overtimeMinutes: '', isAbsent: false,
           }
     })
   },
   { immediate: true },
 )
 
-// 差異ラベル
-function diffLabel(shiftIso: string, actualTime: string, isStart: boolean): { text: string; color: string } | null {
-  const diff = diffMinutes(shiftIso, actualTime, date)
-  if (diff === 0) return null
-  const abs  = Math.abs(diff)
-  const h    = Math.floor(abs / 60)
-  const m    = abs % 60
-  const str  = h > 0 ? `${h}時間${m > 0 ? m + '分' : ''}` : `${m}分`
-  if (isStart) {
-    return diff > 0
-      ? { text: `${str}遅刻`, color: 'text-rose-500' }
-      : { text: `${str}早出`, color: 'text-blue-500' }
-  } else {
-    return diff > 0
-      ? { text: `${str}残業`, color: 'text-amber-500' }
-      : { text: `${str}早退`, color: 'text-rose-500' }
-  }
-}
-
 function endTimeOptions(userId: number): string[] {
   const start = formMap.value[userId]?.startTime ?? '06:00'
+  return timeOptions.filter(t => t > start)
+}
+
+function breakEndOptions(userId: number): string[] {
+  const start = formMap.value[userId]?.breakStartTime ?? '06:00'
   return timeOptions.filter(t => t > start)
 }
 
 function onStartTimeChange(userId: number) {
   const entry = formMap.value[userId]
   if (!entry) return
-  const opts = timeOptions.filter(t => t > entry.startTime)
-  if (opts.length && !opts.includes(entry.endTime)) entry.endTime = opts[0]
+  if (!timeOptions.filter(t => t > entry.startTime).includes(entry.endTime))
+    entry.endTime = timeOptions.filter(t => t > entry.startTime)[0] ?? entry.endTime
 }
 
-// 保存・削除
-const savingId  = ref<number | null>(null)
-const deletingId = ref<number | null>(null)
-const errorMap  = ref<Record<number, string>>({})
+function onBreakStartChange(userId: number) {
+  const entry = formMap.value[userId]
+  if (!entry || !entry.breakStartTime) return
+  if (entry.breakEndTime && entry.breakEndTime <= entry.breakStartTime)
+    entry.breakEndTime = timeOptions.filter(t => t > entry.breakStartTime)[0] ?? ''
+}
 
-async function save(shift: FinalShift) {
-  const form = formMap.value[shift.userId]
-  if (!form) return
-  savingId.value = shift.userId
-  errorMap.value[shift.userId] = ''
+const submitting  = ref(false)
+const submitError = ref('')
+const submitted   = ref(false)
+
+const isAllRecorded = computed(() =>
+  finalShifts.value.length > 0 &&
+  finalShifts.value.every(s => records.value.some(r => r.userId === s.userId))
+)
+
+async function submitAll() {
+  submitting.value  = true
+  submitError.value = ''
   try {
-    const existing = records.value.find(r => r.userId === shift.userId)
-    const body = {
-      date,
-      startTime:       form.startTime,
-      endTime:         form.endTime,
-      breakMinutes:    form.isAbsent || form.breakMinutes    === '' ? null : Number(form.breakMinutes),
-      overtimeMinutes: form.isAbsent || form.overtimeMinutes === '' ? null : Number(form.overtimeMinutes),
-      isAbsent:        form.isAbsent,
-    }
-    if (existing) {
-      await $fetch(`/api/attendance-records/${existing.id}`, { method: 'PATCH', body })
-    } else {
-      await $fetch('/api/attendance-records', {
-        method: 'POST',
-        body: { ...body, userId: shift.userId, shopId: Number(shopId) },
+    await Promise.all(
+      finalShifts.value.map(async (shift) => {
+        const form = formMap.value[shift.userId]
+        if (!form) return
+        const existing = records.value.find(r => r.userId === shift.userId)
+        const body = {
+          date,
+          startTime:       form.startTime,
+          endTime:         form.endTime,
+          breakStartTime:  form.breakStartTime || null,
+          breakEndTime:    form.breakEndTime   || null,
+          overtimeMinutes: form.isAbsent || form.overtimeMinutes === '' ? null : Number(form.overtimeMinutes),
+          isAbsent:        form.isAbsent,
+        }
+        if (existing) {
+          await $fetch(`/api/attendance-records/${existing.id}`, { method: 'PATCH', body })
+        } else {
+          await $fetch('/api/attendance-records', {
+            method: 'POST',
+            body: { ...body, userId: shift.userId, shopId: Number(shopId) },
+          })
+        }
       })
-    }
+    )
     await refreshRecords()
+    submitted.value = true
   } catch (e: unknown) {
-    errorMap.value[shift.userId] = (e as { statusMessage?: string })?.statusMessage ?? '保存に失敗しました'
+    submitError.value = (e as { statusMessage?: string })?.statusMessage ?? '提出に失敗しました'
   } finally {
-    savingId.value = null
-  }
-}
-
-async function remove(shift: FinalShift) {
-  const existing = records.value.find(r => r.userId === shift.userId)
-  if (!existing) return
-  deletingId.value = shift.userId
-  try {
-    await $fetch(`/api/attendance-records/${existing.id}`, { method: 'DELETE' })
-    // フォームをシフト時間にリセット
-    formMap.value[shift.userId] = {
-      startTime:       formatTime(shift.startTime),
-      endTime:         formatTime(shift.endTime),
-      breakMinutes:    '',
-      overtimeMinutes: '',
-      isAbsent:        false,
-    }
-    await refreshRecords()
-  } finally {
-    deletingId.value = null
+    submitting.value = false
   }
 }
 
@@ -197,7 +172,6 @@ function hasRecord(userId: number): boolean {
 
 <template>
   <div class="mx-auto max-w-6xl p-6 lg:p-8">
-    <!-- ヘッダー -->
     <header class="mb-6">
       <p class="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">勤怠記録</p>
       <div class="flex items-center gap-3">
@@ -213,26 +187,41 @@ function hasRecord(userId: number): boolean {
       </div>
     </header>
 
-    <!-- スタッフなし -->
+    <!-- 提出ボタン -->
+    <div v-if="finalShifts.length > 0" class="mb-4 flex items-center gap-3">
+      <button
+        class="rounded-lg px-6 py-2.5 text-sm font-semibold transition disabled:opacity-50"
+        :class="submitted || isAllRecorded
+          ? 'bg-emerald-500 text-white cursor-default'
+          : 'bg-brand text-white hover:bg-brand-dark'"
+        :disabled="submitting || submitted || isAllRecorded"
+        @click="submitAll"
+      >
+        <span v-if="submitting">提出中…</span>
+        <span v-else-if="submitted || isAllRecorded">提出済み</span>
+        <span v-else>提出する</span>
+      </button>
+      <p v-if="submitError" class="text-sm text-rose-500">{{ submitError }}</p>
+    </div>
+
     <div
       v-if="finalShifts.length === 0"
       class="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400 shadow-sm"
     >
-      この日の確定シフトがありません
+      この日のアルバイトの確定シフトがありません
     </div>
 
-    <!-- テーブルリスト -->
-    <section v-else class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <section v-else class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
             <th class="px-4 py-3 text-left">スタッフ</th>
-            <th class="px-3 py-3 text-left">確定シフト</th>
+            <th class="px-3 py-3 text-left whitespace-nowrap">確定シフト</th>
             <th class="px-3 py-3 text-left">出勤</th>
             <th class="px-3 py-3 text-left">退勤</th>
-            <th class="px-3 py-3 text-center w-20">休憩(分)</th>
-            <th class="px-3 py-3 text-center w-20">残業(分)</th>
-            <th class="px-3 py-3 text-center w-32"></th>
+            <th class="px-3 py-3 text-left whitespace-nowrap">休憩</th>
+            <th class="px-3 py-3 text-center w-20 whitespace-nowrap">残業(分)</th>
+            <th class="px-3 py-3 text-center w-16">欠勤</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
@@ -240,19 +229,18 @@ function hasRecord(userId: number): boolean {
             <tr
               v-if="formMap[shift.userId]"
               class="transition-colors"
-              :class="hasRecord(shift.userId) ? 'bg-emerald-50/40' : 'hover:bg-slate-50'"
+              :class="[
+                hasRecord(shift.userId) ? 'bg-emerald-50/40' : 'hover:bg-slate-50',
+                formMap[shift.userId].isAbsent ? 'opacity-60' : '',
+              ]"
             >
               <!-- スタッフ名 -->
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1.5">
-                  <span
-                    class="h-1.5 w-1.5 shrink-0 rounded-full"
-                    :class="hasRecord(shift.userId) ? 'bg-emerald-400' : 'bg-slate-300'"
-                  />
+                  <span class="h-1.5 w-1.5 shrink-0 rounded-full"
+                    :class="hasRecord(shift.userId) ? (formMap[shift.userId].isAbsent ? 'bg-rose-400' : 'bg-emerald-400') : 'bg-slate-300'" />
                   <span class="font-medium text-slate-800">{{ shift.users?.name ?? '—' }}</span>
-                  <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-xs text-slate-400">
-                    {{ shift.users?.employmentType === 'FULL_TIME' ? '社員' : 'バイト' }}
-                  </span>
+                  <span v-if="shift.shop_positions" class="rounded-full bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-500">{{ shift.shop_positions.name }}</span>
                 </div>
               </td>
 
@@ -261,62 +249,58 @@ function hasRecord(userId: number): boolean {
                 {{ formatTime(shift.startTime) }}〜{{ formatTime(shift.endTime) }}
               </td>
 
-              <!-- 出勤時間 -->
+              <!-- 出勤 -->
+              <td class="px-3 py-3">
+                <select v-if="!formMap[shift.userId].isAbsent"
+                  v-model="formMap[shift.userId].startTime"
+                  class="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-brand focus:outline-none"
+                  @change="onStartTimeChange(shift.userId)"
+                >
+                  <option v-for="t in timeOptions" :key="t" :value="t">{{ t }}</option>
+                </select>
+                <span v-else class="text-xs text-rose-400">—</span>
+              </td>
+
+              <!-- 退勤 -->
+              <td class="px-3 py-3">
+                <select v-if="!formMap[shift.userId].isAbsent"
+                  v-model="formMap[shift.userId].endTime"
+                  class="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-brand focus:outline-none"
+                >
+                  <option v-for="t in endTimeOptions(shift.userId)" :key="t" :value="t">{{ t }}</option>
+                </select>
+                <span v-else class="text-xs text-rose-400">—</span>
+              </td>
+
+              <!-- 休憩（開始〜終了） -->
               <td class="px-3 py-3">
                 <template v-if="!formMap[shift.userId].isAbsent">
-                  <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-1 whitespace-nowrap">
                     <select
-                      v-model="formMap[shift.userId].startTime"
+                      v-model="formMap[shift.userId].breakStartTime"
                       class="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-brand focus:outline-none"
-                      @change="onStartTimeChange(shift.userId)"
+                      @change="onBreakStartChange(shift.userId)"
                     >
+                      <option value="">—</option>
                       <option v-for="t in timeOptions" :key="t" :value="t">{{ t }}</option>
                     </select>
-                    <span
-                      v-if="diffLabel(shift.startTime, formMap[shift.userId].startTime, true)"
-                      class="text-xs whitespace-nowrap"
-                      :class="diffLabel(shift.startTime, formMap[shift.userId].startTime, true)!.color"
-                    >{{ diffLabel(shift.startTime, formMap[shift.userId].startTime, true)!.text }}</span>
-                  </div>
-                </template>
-                <span v-else class="text-xs text-rose-400">—</span>
-              </td>
-
-              <!-- 退勤時間 -->
-              <td class="px-3 py-3">
-                <template v-if="!formMap[shift.userId].isAbsent">
-                  <div class="flex items-center gap-1">
+                    <span class="text-xs text-slate-300">〜</span>
                     <select
-                      v-model="formMap[shift.userId].endTime"
-                      class="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-brand focus:outline-none"
+                      v-model="formMap[shift.userId].breakEndTime"
+                      :disabled="!formMap[shift.userId].breakStartTime"
+                      class="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-brand focus:outline-none disabled:opacity-40"
                     >
-                      <option v-for="t in endTimeOptions(shift.userId)" :key="t" :value="t">{{ t }}</option>
+                      <option value="">—</option>
+                      <option v-for="t in breakEndOptions(shift.userId)" :key="t" :value="t">{{ t }}</option>
                     </select>
-                    <span
-                      v-if="diffLabel(shift.endTime, formMap[shift.userId].endTime, false)"
-                      class="text-xs whitespace-nowrap"
-                      :class="diffLabel(shift.endTime, formMap[shift.userId].endTime, false)!.color"
-                    >{{ diffLabel(shift.endTime, formMap[shift.userId].endTime, false)!.text }}</span>
                   </div>
                 </template>
                 <span v-else class="text-xs text-rose-400">—</span>
               </td>
 
-              <!-- 休憩時間 -->
+              <!-- 残業(分) -->
               <td class="px-3 py-3">
-                <input
-                  v-if="!formMap[shift.userId].isAbsent"
-                  v-model="formMap[shift.userId].breakMinutes"
-                  type="number" min="0" step="5" placeholder="—"
-                  class="w-16 rounded border border-slate-200 px-2 py-1 text-center text-xs focus:border-brand focus:outline-none"
-                />
-                <span v-else class="block text-center text-xs text-rose-400">—</span>
-              </td>
-
-              <!-- 残業時間 -->
-              <td class="px-3 py-3">
-                <input
-                  v-if="!formMap[shift.userId].isAbsent"
+                <input v-if="!formMap[shift.userId].isAbsent"
                   v-model="formMap[shift.userId].overtimeMinutes"
                   type="number" min="0" step="5" placeholder="—"
                   class="w-16 rounded border border-slate-200 px-2 py-1 text-center text-xs focus:border-brand focus:outline-none"
@@ -324,29 +308,15 @@ function hasRecord(userId: number): boolean {
                 <span v-else class="block text-center text-xs text-rose-400">—</span>
               </td>
 
-              <!-- 操作ボタン -->
-              <td class="px-3 py-3">
-                <div class="flex items-center justify-center gap-1">
-                  <button
-                    class="rounded px-2 py-1.5 text-xs font-semibold transition"
-                    :class="formMap[shift.userId].isAbsent
-                      ? 'bg-rose-100 text-rose-600 hover:bg-rose-200'
-                      : 'border border-slate-200 text-slate-400 hover:bg-slate-100'"
-                    @click="formMap[shift.userId].isAbsent = !formMap[shift.userId].isAbsent"
-                  >欠勤</button>
-                  <button
-                    class="rounded bg-brand px-2 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-40"
-                    :disabled="savingId === shift.userId"
-                    @click="save(shift)"
-                  >{{ savingId === shift.userId ? '…' : '保存' }}</button>
-                  <button
-                    v-if="hasRecord(shift.userId)"
-                    class="rounded border border-rose-200 px-2 py-1.5 text-xs text-rose-400 hover:bg-rose-50 disabled:opacity-40"
-                    :disabled="deletingId === shift.userId"
-                    @click="remove(shift)"
-                  >削除</button>
-                </div>
-                <p v-if="errorMap[shift.userId]" class="mt-1 text-center text-xs text-rose-500">{{ errorMap[shift.userId] }}</p>
+              <!-- 欠勤トグル -->
+              <td class="px-3 py-3 text-center">
+                <button
+                  class="rounded px-2 py-1.5 text-xs font-semibold transition"
+                  :class="formMap[shift.userId].isAbsent
+                    ? 'bg-rose-100 text-rose-600 hover:bg-rose-200'
+                    : 'border border-slate-200 text-slate-400 hover:bg-slate-100'"
+                  @click="formMap[shift.userId].isAbsent = !formMap[shift.userId].isAbsent; submitted = false"
+                >欠勤</button>
               </td>
             </tr>
           </template>

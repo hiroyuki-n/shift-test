@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { HomeIcon, BuildingStorefrontIcon, UsersIcon } from '@heroicons/vue/24/outline'
+import { HomeIcon, BuildingStorefrontIcon, UsersIcon, ClipboardDocumentListIcon } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
 
 const navItems = [
-  { label: 'ダッシュボード', to: '/admin',        icon: HomeIcon,               },
-  { label: '店舗',           to: '/admin/shops',  icon: BuildingStorefrontIcon, },
-  { label: 'スタッフ',       to: '/admin/staff',  icon: UsersIcon,              },
+  { label: 'ダッシュボード', to: '/admin',               icon: HomeIcon,                   },
+  { label: '店舗',           to: '/admin/shops',         icon: BuildingStorefrontIcon,     },
+  { label: 'スタッフ',       to: '/admin/staff',         icon: UsersIcon,                  },
+  { label: '勤怠報告',       to: '/admin/attendance',    icon: ClipboardDocumentListIcon,  },
 ]
 </script>
 
@@ -24,7 +25,7 @@ const navItems = [
           :key="item.to"
           :to="item.to"
           class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
-          :class="route.path === item.to
+          :class="route.path.startsWith(item.to) && (item.to !== '/admin' || route.path === '/admin')
             ? 'bg-brand/10 text-brand'
             : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'"
         >
