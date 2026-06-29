@@ -72,21 +72,30 @@ const dayList = computed(() => {
 const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
 // 出勤提出
-const submitting = ref<string | null>(null)
+const submitting = ref(new Set<string>())
+
+function isSubmitting(dateStr: string) { return submitting.value.has(dateStr) }
 
 async function submitAttendance(dateStr: string) {
-  submitting.value = dateStr
+  if (isSubmitting(dateStr)) return
+  submitting.value.add(dateStr)
+  submitting.value = new Set(submitting.value)
   try {
     await $fetch('/api/shift-requests', {
       method: 'POST',
       body: { userId, date: dateStr, startTime: '09:00', endTime: '18:00' },
     })
     await refreshRequests()
-  } finally { submitting.value = null }
+  } finally {
+    submitting.value.delete(dateStr)
+    submitting.value = new Set(submitting.value)
+  }
 }
 
 async function markAbsent(dateStr: string, reqId: number | null) {
-  submitting.value = dateStr
+  if (isSubmitting(dateStr)) return
+  submitting.value.add(dateStr)
+  submitting.value = new Set(submitting.value)
   try {
     if (reqId) {
       // 既存リクエストをREJECTEDに変更
@@ -100,7 +109,10 @@ async function markAbsent(dateStr: string, reqId: number | null) {
       await $fetch(`/api/shift-requests/${id}`, { method: 'PATCH', body: { status: 'REJECTED' } })
     }
     await refreshRequests()
-  } finally { submitting.value = null }
+  } finally {
+    submitting.value.delete(dateStr)
+    submitting.value = new Set(submitting.value)
+  }
 }
 
 async function logout() {
@@ -190,7 +202,7 @@ onMounted(() => {
                     :class="day.status === 'pending'
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-slate-100 text-slate-400 hover:text-slate-600'"
-                    :disabled="submitting === day.dateStr || day.status === 'pending'"
+                    :disabled="isSubmitting(day.dateStr) || day.status === 'pending'"
                     @click="submitAttendance(day.dateStr)"
                   >出勤</button>
                   <button
@@ -198,7 +210,7 @@ onMounted(() => {
                     :class="day.status === 'absent'
                       ? 'bg-rose-100 text-rose-600'
                       : 'bg-slate-100 text-slate-400 hover:text-slate-600'"
-                    :disabled="submitting === day.dateStr || day.status === 'absent'"
+                    :disabled="isSubmitting(day.dateStr) || day.status === 'absent'"
                     @click="markAbsent(day.dateStr, day.reqId)"
                   >休み</button>
                 </template>

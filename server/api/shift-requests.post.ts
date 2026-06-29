@@ -29,6 +29,17 @@ export default defineEventHandler(async (event) => {
 
   const client = await serverSupabaseClient(event)
 
+  // 同じ日・同じユーザーのリクエストが既に存在する場合は400
+  const { data: existing } = await client
+    .from('shift_requests')
+    .select('id')
+    .eq('userId', userId)
+    .eq('date', date)
+    .maybeSingle()
+  if (existing) {
+    throw createError({ statusCode: 409, statusMessage: 'この日はすでに希望が提出されています' })
+  }
+
   let shopId = body?.shopId
   if (!shopId) {
     const { data: user } = await client
@@ -47,8 +58,8 @@ export default defineEventHandler(async (event) => {
     .from('shift_requests')
     .insert({
       date,
-      startTime: new Date(`${date}T${startTime}:00`).toISOString(),
-      endTime: new Date(`${date}T${endTime}:00`).toISOString(),
+      startTime: new Date(`${date}T${startTime}:00+09:00`).toISOString(),
+      endTime: new Date(`${date}T${endTime}:00+09:00`).toISOString(),
       status: 'PENDING',
       note,
       userId,

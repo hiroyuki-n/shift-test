@@ -60,16 +60,24 @@ const { data: myFinalShifts, refresh: refreshFinalShifts } = await useFetch<Fina
   { query: { userId, month: currentMonth }, default: () => [] },
 )
 
+// 店舗名マップ
+const shopMap = computed(() => {
+  const m = new Map<number, string>()
+  allShops.value.forEach(s => m.set(s.id, s.name))
+  return m
+})
+
 // 日別ステータス
 const dayInfoMap = computed(() => {
-  const map = new Map<string, { status: DayStatus; startTime: string; endTime: string }>()
-  for (const f of myFinalShifts.value) map.set(f.date, { status: 'confirmed', startTime: f.startTime, endTime: f.endTime })
+  const map = new Map<string, { status: DayStatus; startTime: string; endTime: string; shopId: number | null }>()
+  for (const f of myFinalShifts.value) map.set(f.date, { status: 'confirmed', startTime: f.startTime, endTime: f.endTime, shopId: f.shopId })
   for (const r of myRequests.value) {
     if (!map.has(r.date)) {
       map.set(r.date, {
         status: r.status === 'REJECTED' ? 'rejected' : 'pending',
         startTime: r.startTime,
         endTime: r.endTime,
+        shopId: r.shopId,
       })
     }
   }
@@ -116,14 +124,20 @@ const selectedDateLabel = computed(() => {
   })
 })
 
+// --- 全店舗一覧 ---
+const { data: allShops } = await useFetch<{ id: number; name: string }[]>('/api/shops', { default: () => [] })
+
 function openModal(dateStr: string) {
   selectedDate.value = dateStr
-  form.startTime = '09:00'; form.endTime = '17:00'; formError.value = ''
+  form.startTime = '09:00'
+  form.endTime   = '17:00'
+  form.shopId    = me.value?.primaryShopId ?? null
+  formError.value = ''
   showModal.value = true
 }
 function closeModal() { showModal.value = false; selectedDate.value = null; formError.value = '' }
 
-const form = reactive({ startTime: '09:00', endTime: '17:00' })
+const form = reactive({ startTime: '09:00', endTime: '17:00', shopId: null as number | null })
 const timeSlots = Array.from({ length: 29 }, (_, i) => {
   const min = 8 * 60 + i * 30
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
@@ -142,7 +156,7 @@ async function submitShift(start: string, end: string) {
   try {
     await $fetch('/api/shift-requests', {
       method: 'POST',
-      body: { userId, date: selectedDate.value, startTime: start, endTime: end },
+      body: { userId, date: selectedDate.value, startTime: start, endTime: end, shopId: form.shopId },
     })
     await refreshRequests(); closeModal()
   } catch (e: unknown) {
@@ -233,6 +247,12 @@ onMounted(() => {
                   <template v-if="cell.info && cell.info.status !== 'rejected'">
                     <span class="mt-0.5 leading-none opacity-80" style="font-size:9px">{{ formatTime(cell.info.startTime) }}</span>
                     <span class="leading-none opacity-80" style="font-size:9px">〜{{ formatTime(cell.info.endTime) }}</span>
+                    <!-- 他店舗の場合は店舗名を表示 -->
+                    <span
+                      v-if="cell.info.shopId && cell.info.shopId !== me?.primaryShopId"
+                      class="mt-0.5 leading-none font-bold text-purple-600"
+                      style="font-size:8px"
+                    >{{ shopMap.get(cell.info.shopId) ?? '他店' }}</span>
                   </template>
                   <template v-else-if="cell.info?.status === 'rejected'">
                     <span class="mt-0.5 leading-none opacity-80" style="font-size:9px">休み</span>
@@ -270,7 +290,19 @@ onMounted(() => {
             </template>
             <!-- 未提出 -->
             <template v-else>
-              <p class="mb-4 text-sm text-slate-500">勤務時間を選択してください</p>
+              <p class="mb-3 text-sm text-slate-500">勤務時間を選択してください</p>
+              <!-- 店舗選択 -->
+              <label class="mb-3 block">
+                <span class="mb-1 block text-xs font-medium text-slate-600">出勤店舗</span>
+                <select
+                  v-model="form.shopId"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+                >
+                  <option v-for="shop in allShops" :key="shop.id" :value="shop.id">
+                    {{ shop.name }}{{ shop.id === me?.primaryShopId ? '（メイン）' : '' }}
+                  </option>
+                </select>
+              </label>
               <div class="mb-4 grid grid-cols-2 gap-3">
                 <label class="block">
                   <span class="mb-1 block text-xs font-medium text-slate-600">開始時間</span>

@@ -11,7 +11,7 @@ interface FinalShift {
   positionId: number | null
   userId: number
   shopId: number
-  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
+  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null; primaryShopId: number | null } | null
   shop_positions: { name: string } | null
 }
 
@@ -24,7 +24,7 @@ interface ShiftRequest {
   note: string | null;
   userId: number;
   shopId: number;
-  users: { name: string; employmentType: "PART_TIME" | "FULL_TIME" | null } | null;
+  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null; primaryShopId: number | null } | null;
 }
 
 interface ShopDetail {
@@ -42,6 +42,13 @@ const date = route.params.date as string;
 
 const { data: shopData } = await useFetch<ShopDetail>(`/api/shops/${shopId}`)
 
+const { data: allShops } = await useFetch<{ id: number; name: string }[]>('/api/shops', { default: () => [] })
+const shopNameMap = computed(() => {
+  const m = new Map<number, string>()
+  allShops.value.forEach(s => m.set(s.id, s.name))
+  return m
+})
+
 // --- ポジション ---
 interface ShopPosition { id: number; name: string }
 const { data: shopPositions } = await useFetch<ShopPosition[]>(
@@ -50,6 +57,8 @@ const { data: shopPositions } = await useFetch<ShopPosition[]>(
 )
 // リクエストごとの選択ポジション（requestId → positionId）
 const positionMap = ref<Record<number, number>>({})
+// リクエストごとの確定時間（HH:mm 形式）
+const shiftTimeMap = ref<Record<number, { startTime: string; endTime: string }>>({})
 
 const { data: shifts, refresh: refreshShifts } = await useFetch<FinalShift[]>("/api/final-shifts", {
   query: { shopId, date },
@@ -61,18 +70,46 @@ const { data: requests, refresh: refreshRequests } = await useFetch<ShiftRequest
   default: () => [],
 });
 
-// ポジションのデフォルト選択（requests と shopPositions が揃ってから実行）
+// ポジション・確定時間のデフォルト初期化
 watch(
   [requests, shopPositions],
   () => {
     const defaultId = shopPositions.value[0]?.id
-    if (!defaultId) return
     requests.value.forEach(r => {
-      if (!positionMap.value[r.id]) positionMap.value[r.id] = defaultId
+      if (!positionMap.value[r.id] && defaultId) positionMap.value[r.id] = defaultId
+      if (!shiftTimeMap.value[r.id]) {
+        shiftTimeMap.value[r.id] = {
+          startTime: formatTime(r.startTime),
+          endTime:   formatTime(r.endTime),
+        }
+      }
     })
   },
   { immediate: true },
 )
+
+// 30 分刻み時間オプション（08:00〜22:00）
+const timeOptions: string[] = (() => {
+  const opts: string[] = []
+  for (let h = 8; h < 22; h++) {
+    opts.push(`${String(h).padStart(2, '0')}:00`)
+    opts.push(`${String(h).padStart(2, '0')}:30`)
+  }
+  opts.push('22:00')
+  return opts
+})()
+
+function endTimeOptions(reqId: number): string[] {
+  const start = shiftTimeMap.value[reqId]?.startTime ?? '08:00'
+  return timeOptions.filter(t => t > start)
+}
+
+function onStartTimeChange(reqId: number) {
+  const entry = shiftTimeMap.value[reqId]
+  if (!entry) return
+  const opts = timeOptions.filter(t => t > entry.startTime)
+  if (opts.length && !opts.includes(entry.endTime)) entry.endTime = opts[0]
+}
 
 // --- 承認 / 却下 ---
 const STATUS_CONFIG: Record<ShiftStatus, { label: string; badge: string }> = {
@@ -159,19 +196,26 @@ async function confirmShifts() {
   confirming.value = true
   try {
     await Promise.all(
-      unconfirmedRequests.value.map(r =>
-        $fetch('/api/final-shifts', {
+      unconfirmedRequests.value.map(r => {
+        const entry = shiftTimeMap.value[r.id]
+        const startTime = entry
+          ? new Date(`${r.date}T${entry.startTime}:00+09:00`).toISOString()
+          : r.startTime
+        const endTime = entry
+          ? new Date(`${r.date}T${entry.endTime}:00+09:00`).toISOString()
+          : r.endTime
+        return $fetch('/api/final-shifts', {
           method: 'POST',
           body: {
             date:       r.date,
-            startTime:  r.startTime,
-            endTime:    r.endTime,
+            startTime,
+            endTime,
             positionId: positionMap.value[r.id] ?? shopPositions.value[0]?.id ?? null,
             userId:     r.userId,
             shopId,
           },
-        }),
-      ),
+        })
+      }),
     )
     timelineMounted.value = false
     await refreshShifts()
@@ -259,7 +303,7 @@ const dateLabel = computed(() =>
     </header>
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <!-- 左：タイムライン -->
+      <!-- 調整・確定タイムライン -->
       <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 class="mb-3 text-sm font-semibold text-slate-700">タイムライン</h2>
         <ClientOnly>
@@ -268,6 +312,7 @@ const dateLabel = computed(() =>
               :shifts="shifts"
               :requests="isConfirmed ? [] : requests"
               :date="date"
+              :current-shop-id="shopId"
               @request-click="onCalendarRequestClick"
               @final-shift-click="onCalendarFinalShiftClick"
             />
@@ -346,6 +391,10 @@ const dateLabel = computed(() =>
               class="flex items-center gap-2 px-5 py-2.5"
             >
               <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ req.users?.name ?? '—' }}</span>
+              <span
+                v-if="req.users?.primaryShopId && req.users.primaryShopId !== Number(shopId)"
+                class="shrink-0 rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700"
+              >{{ req.users?.primaryShopId ? (shopNameMap.get(req.users.primaryShopId) ?? '他店') : '他店' }}</span>
               <select
                 v-model="positionMap[req.id]"
                 class="rounded-lg border border-slate-300 px-2 py-1 text-xs focus:border-brand focus:outline-none"
@@ -378,24 +427,53 @@ const dateLabel = computed(() =>
             <li
               v-for="req in [...requests].filter(r => r.users?.employmentType !== 'FULL_TIME').sort((a, b) => a.startTime.localeCompare(b.startTime))"
               :key="req.id"
-              class="flex items-center gap-2 px-5 py-2.5"
+              class="px-5 py-3"
             >
-              <span class="shrink-0 text-xs text-slate-500">{{ formatTime(req.startTime) }}〜{{ formatTime(req.endTime) }}</span>
-              <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ req.users?.name ?? '—' }}</span>
-              <select
-                v-model="positionMap[req.id]"
-                class="rounded-lg border border-slate-300 px-2 py-1 text-xs focus:border-brand focus:outline-none"
-              >
-                <option v-for="p in shopPositions" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
-              <div class="flex shrink-0 gap-1">
-                <button
-                  v-for="(cfg, key) in STATUS_CONFIG" :key="key"
-                  class="rounded-full px-2 py-0.5 text-xs font-semibold transition"
-                  :class="req.status === key ? cfg.badge : 'bg-slate-100 text-slate-300 hover:text-slate-500'"
-                  :disabled="updatingId === req.id"
-                  @click="updateStatus(req.id, key as ShiftStatus)"
-                >{{ cfg.label }}</button>
+              <!-- 行1: 名前・バッジ・ステータスボタン -->
+              <div class="flex items-center gap-2">
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{{ req.users?.name ?? '—' }}</span>
+                <span
+                  v-if="req.users?.primaryShopId && req.users.primaryShopId !== Number(shopId)"
+                  class="shrink-0 rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700"
+                >{{ shopNameMap.get(req.users.primaryShopId) ?? '他店' }}</span>
+                <div class="flex shrink-0 gap-1">
+                  <button
+                    v-for="(cfg, key) in STATUS_CONFIG" :key="key"
+                    class="rounded-full px-2 py-0.5 text-xs font-semibold transition"
+                    :class="req.status === key ? cfg.badge : 'bg-slate-100 text-slate-300 hover:text-slate-500'"
+                    :disabled="updatingId === req.id"
+                    @click="updateStatus(req.id, key as ShiftStatus)"
+                  >{{ cfg.label }}</button>
+                </div>
+              </div>
+              <!-- 行2: 希望時間 → 確定時間・ポジション -->
+              <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <span class="text-xs text-slate-400">希望 {{ formatTime(req.startTime) }}〜{{ formatTime(req.endTime) }}</span>
+                <span class="text-xs text-slate-300">→</span>
+                <div class="flex items-center gap-1">
+                  <select
+                    v-if="shiftTimeMap[req.id]"
+                    v-model="shiftTimeMap[req.id].startTime"
+                    class="rounded border border-slate-300 px-1.5 py-0.5 text-xs focus:border-brand focus:outline-none"
+                    @change="onStartTimeChange(req.id)"
+                  >
+                    <option v-for="t in timeOptions" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                  <span class="text-xs text-slate-400">〜</span>
+                  <select
+                    v-if="shiftTimeMap[req.id]"
+                    v-model="shiftTimeMap[req.id].endTime"
+                    class="rounded border border-slate-300 px-1.5 py-0.5 text-xs focus:border-brand focus:outline-none"
+                  >
+                    <option v-for="t in endTimeOptions(req.id)" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                </div>
+                <select
+                  v-model="positionMap[req.id]"
+                  class="rounded border border-slate-300 px-1.5 py-0.5 text-xs focus:border-brand focus:outline-none"
+                >
+                  <option v-for="p in shopPositions" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
               </div>
             </li>
             <li v-if="!requests.some((r) => r.users?.employmentType !== 'FULL_TIME')" class="px-5 py-4 text-center text-sm text-slate-400">アルバイトの希望はありません</li>
@@ -405,6 +483,26 @@ const dateLabel = computed(() =>
 
       </div>
     </div>
+
+    <!-- 希望シフト（参照用・常時表示） -->
+    <section class="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="mb-3 text-sm font-semibold text-slate-700">
+        希望シフト
+        <span class="ml-1.5 text-xs font-normal text-slate-400">参照用</span>
+      </h2>
+      <ClientOnly>
+        <ShiftTimeline
+          :shifts="[]"
+          :requests="requests"
+          :date="date"
+          :current-shop-id="shopId"
+          :readonly="true"
+        />
+        <template #fallback>
+          <div class="py-16 text-center text-sm text-slate-400">読み込み中…</div>
+        </template>
+      </ClientOnly>
+    </section>
 
     <!-- 確定シフト ポジション変更ポップアップ -->
     <Teleport to="body">
@@ -456,6 +554,26 @@ const dateLabel = computed(() =>
             <span class="mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="STATUS_CONFIG[popupRequest.status].badge">{{ STATUS_CONFIG[popupRequest.status].label }}</span>
           </div>
           <div class="p-4">
+            <!-- アルバイト: 確定時間選択 -->
+            <div v-if="popupRequest.users?.employmentType !== 'FULL_TIME' && shiftTimeMap[popupRequest.id]" class="mb-3">
+              <p class="mb-1 text-xs font-medium text-slate-500">確定時間</p>
+              <div class="flex items-center gap-1.5">
+                <select
+                  v-model="shiftTimeMap[popupRequest.id].startTime"
+                  class="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-brand focus:outline-none"
+                  @change="onStartTimeChange(popupRequest.id)"
+                >
+                  <option v-for="t in timeOptions" :key="t" :value="t">{{ t }}</option>
+                </select>
+                <span class="text-sm text-slate-400">〜</span>
+                <select
+                  v-model="shiftTimeMap[popupRequest.id].endTime"
+                  class="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-brand focus:outline-none"
+                >
+                  <option v-for="t in endTimeOptions(popupRequest.id)" :key="t" :value="t">{{ t }}</option>
+                </select>
+              </div>
+            </div>
             <!-- ポジション選択 -->
             <div v-if="shopPositions.length > 0" class="mb-3">
               <select

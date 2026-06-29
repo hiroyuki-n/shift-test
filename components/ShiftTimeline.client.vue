@@ -10,7 +10,7 @@ interface Shift {
   id: number; startTime: string; endTime: string; date: string
   positionId: number | null
   shop_positions: { name: string } | null
-  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
+  users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null; primaryShopId: number | null } | null
 }
 interface Request {
   id: number; startTime: string; endTime: string; date: string
@@ -18,15 +18,16 @@ interface Request {
   users: { name: string; employmentType: 'PART_TIME' | 'FULL_TIME' | null } | null
 }
 
-const props = defineProps<{ shifts: Shift[]; requests?: Request[]; date: string }>()
+const props = defineProps<{ shifts: Shift[]; requests?: Request[]; date: string; currentShopId?: number | string; readonly?: boolean }>()
 
 const emit = defineEmits<{
   requestClick:    [id: number, status: ShiftStatus]
   finalShiftClick: [id: number]
 }>()
 
-// --- 色設定（確定シフト：単一色） ---
-const confirmedColor = { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' }
+// --- 色設定 ---
+const confirmedColor      = { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' }  // 同店舗（青）
+const confirmedOtherColor = { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' }  // 他店舗（琥珀）
 const requestColors: Record<ShiftStatus, { bg: string; border: string; text: string; dashed: boolean } | null> = {
   PENDING:  { bg: '#f1f5f9', border: '#94a3b8', text: '#64748b', dashed: true  },
   APPROVED: { bg: '#dbeafe', border: '#6366f1', text: '#3730a3', dashed: false },
@@ -38,31 +39,33 @@ function buildEvents(): EventInput[] {
   const events: EventInput[] = []
 
   for (const s of props.shifts) {
-    const isFullTime = s.users?.employmentType === 'FULL_TIME'
+    const isFullTime  = s.users?.employmentType === 'FULL_TIME'
+    const isOtherShop = props.currentShopId !== undefined
+      && s.users?.primaryShopId !== null
+      && s.users?.primaryShopId !== Number(props.currentShopId)
+    const color = isOtherShop ? confirmedOtherColor : confirmedColor
 
     if (isFullTime) {
-      // 社員 → 終日行（allDay）
       events.push({
         id:              `final-${s.id}`,
         title:           s.users?.name ?? '—',
         start:           s.date,
         allDay:          true,
-        backgroundColor: '#e0e7ff',
-        borderColor:     '#6366f1',
-        textColor:       '#3730a3',
-        extendedProps:   { type: 'final-allday' },
+        backgroundColor: isOtherShop ? '#fef3c7' : '#e0e7ff',
+        borderColor:     isOtherShop ? '#f59e0b' : '#6366f1',
+        textColor:       isOtherShop ? '#92400e' : '#3730a3',
+        extendedProps:   { type: 'final-allday', isOtherShop },
       })
     } else {
-      // アルバイト → 時間ブロック
       events.push({
         id:              `final-${s.id}`,
         title:           s.users?.name ?? '—',
         start:           s.startTime,
         end:             s.endTime,
-        backgroundColor: confirmedColor.bg,
-        borderColor:     confirmedColor.border,
-        textColor:       confirmedColor.text,
-        extendedProps:   { type: 'final', label: s.shop_positions?.name ?? '' },
+        backgroundColor: color.bg,
+        borderColor:     color.border,
+        textColor:       color.text,
+        extendedProps:   { type: 'final', label: s.shop_positions?.name ?? '', isOtherShop },
       })
     }
   }
@@ -161,8 +164,7 @@ const calendarOptions = computed(() => ({
   nowIndicator:      true,
   events:            buildEvents(),
   eventContent:      renderEventContent,
-  eventClick:        handleEventClick,
-  eventCursor:       'pointer',
+  ...(props.readonly ? { eventCursor: 'default' } : { eventClick: handleEventClick, eventCursor: 'pointer' }),
   slotLabelFormat:   { hour: '2-digit', minute: '2-digit', hour12: false },
 }))
 </script>
