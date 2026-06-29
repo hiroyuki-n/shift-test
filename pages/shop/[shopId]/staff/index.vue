@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { UserPlusIcon, ArrowRightEndOnRectangleIcon } from '@heroicons/vue/24/outline'
 definePageMeta({ layout: 'shop' })
+useHead({ title: 'スタッフ管理' })
 
 type EmploymentType = 'PART_TIME' | 'FULL_TIME'
 

@@ -38,6 +38,7 @@ interface ShiftRequest {
 }
 
 definePageMeta({ layout: 'shop' })
+useHead({ title: 'シフト管理' })
 
 const route  = useRoute()
 const shopId = computed(() => route.params.shopId as string)

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'staff' })
+useHead({ title: 'マイシフト' })
 
 interface CurrentUser {
   id: number; employmentType: string | null; primaryShopId: number | null; name: string

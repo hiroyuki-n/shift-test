@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'shop' })
+useHead({ title: 'スタッフ詳細' })
 
 type ShiftStatus    = 'PENDING' | 'APPROVED' | 'REJECTED'
 type EmploymentType = 'PART_TIME' | 'FULL_TIME'
@@ -123,55 +124,53 @@ const workDays = computed(() => new Set(finalShifts.value.map(s => s.date)).size
       </div>
     </header>
 
-    <!-- プロフィール情報 -->
-    <section class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
+    <!-- 基本情報 -->
+    <section class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div class="border-b border-slate-100 px-6 py-3">
         <h2 class="text-sm font-semibold text-slate-700">基本情報</h2>
       </div>
-      <dl class="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3">
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">スタッフID</dt>
-          <dd class="mt-1 font-mono text-sm font-semibold text-slate-800">{{ staff?.id }}</dd>
-        </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">雇用形態</dt>
-          <dd class="mt-1 text-sm font-semibold text-slate-800">
-            {{ staff?.employmentType ? employmentLabel[staff.employmentType as EmploymentType] : '—' }}
-          </dd>
-        </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">在籍状態</dt>
-          <dd class="mt-1">
-            <span
-              class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-              :class="staff?.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
-            >
-              {{ staff?.isActive ? '在籍中' : '退職済み' }}
-            </span>
-          </dd>
-        </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">登録日</dt>
-          <dd class="mt-1 text-sm text-slate-800">{{ staff?.createdAt ? formatDate(staff.createdAt) : '—' }}</dd>
-        </div>
-        <div class="bg-white px-5 py-4">
-          <dt class="text-xs text-slate-400">最終更新</dt>
-          <dd class="mt-1 text-sm text-slate-800">{{ staff?.updatedAt ? formatDate(staff.updatedAt) : '—' }}</dd>
-        </div>
-      </dl>
-    </section>
-
-    <!-- アルバイト設定（時給・表示のみ） -->
-    <section v-if="staff?.employmentType === 'PART_TIME'" class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div class="border-b border-slate-100 px-6 py-3">
-        <h2 class="text-sm font-semibold text-slate-700">アルバイト設定</h2>
-      </div>
-      <dl class="px-6 py-4">
-        <dt class="text-xs text-slate-400">時給</dt>
-        <dd class="mt-1 text-sm font-semibold text-slate-800">
-          {{ staff.part_time_settings?.hourlywage != null ? `${staff.part_time_settings.hourlywage} 円 / 時` : '未設定' }}
-        </dd>
-      </dl>
+      <table class="w-full text-sm">
+        <tbody class="divide-y divide-slate-100">
+          <tr>
+            <th class="w-36 bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">スタッフID</th>
+            <td class="px-6 py-3 font-mono text-xs text-slate-600">{{ staff?.id }}</td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">氏名</th>
+            <td class="px-6 py-3 font-medium text-slate-800">{{ staff?.name ?? '—' }}</td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">雇用形態</th>
+            <td class="px-6 py-3">
+              <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                :class="staff?.employmentType === 'FULL_TIME' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'">
+                {{ staff?.employmentType ? employmentLabel[staff.employmentType as EmploymentType] : '—' }}
+              </span>
+            </td>
+          </tr>
+          <tr v-if="staff?.employmentType === 'PART_TIME'">
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">時給</th>
+            <td class="px-6 py-3 font-medium text-slate-800">
+              {{ staff.part_time_settings?.hourlywage != null
+                ? `¥${staff.part_time_settings.hourlywage.toLocaleString()} / 時`
+                : '未設定' }}
+            </td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">在籍状態</th>
+            <td class="px-6 py-3">
+              <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                :class="staff?.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'">
+                {{ staff?.isActive ? '在籍中' : '退職済み' }}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">登録日</th>
+            <td class="px-6 py-3 text-slate-600">{{ staff?.createdAt ? formatDate(staff.createdAt) : '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
     </section>
 
     <!-- 月ナビゲーション -->

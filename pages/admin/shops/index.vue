@@ -2,6 +2,7 @@
 import { PlusIcon, ArrowRightIcon, BuildingStorefrontIcon } from '@heroicons/vue/24/outline'
 
 definePageMeta({ layout: 'admin' })
+useHead({ title: '店舗一覧' })
 
 interface Shop {
   id: number

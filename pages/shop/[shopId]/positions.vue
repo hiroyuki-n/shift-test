@@ -2,6 +2,7 @@
 import { PlusIcon, PencilSquareIcon, TrashIcon, CheckIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 
 definePageMeta({ layout: 'shop' })
+useHead({ title: 'ポジション管理' })
 
 interface Position {
   id: number

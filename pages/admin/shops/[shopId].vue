@@ -2,6 +2,7 @@
 import { ArrowLeftIcon, ArrowRightIcon, BuildingStorefrontIcon } from '@heroicons/vue/24/outline'
 
 definePageMeta({ layout: 'admin' })
+useHead({ title: '店舗詳細' })
 
 type EmploymentType = 'PART_TIME' | 'FULL_TIME'
 
@@ -89,6 +90,29 @@ function formatDate(iso: string) {
           <p class="mt-1 text-3xl font-bold text-indigo-600">{{ fullTimeCount }}</p>
         </div>
       </div>
+
+      <!-- 基本情報 -->
+      <section class="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-100 px-6 py-4">
+          <h2 class="text-sm font-semibold text-slate-700">基本情報</h2>
+        </div>
+        <table class="w-full text-sm">
+          <tbody class="divide-y divide-slate-100">
+            <tr>
+              <th class="w-36 bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">店舗ID</th>
+              <td class="px-6 py-3 font-mono text-xs text-slate-600">{{ data?.shop?.id }}</td>
+            </tr>
+            <tr>
+              <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">店舗名</th>
+              <td class="px-6 py-3 font-medium text-slate-800">{{ data?.shop?.name ?? '—' }}</td>
+            </tr>
+            <tr>
+              <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">登録日</th>
+              <td class="px-6 py-3 text-slate-600">{{ data?.shop?.createdAt ? formatDate(data.shop.createdAt) : '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
       <!-- スタッフ一覧 -->
       <section class="rounded-xl border border-slate-200 bg-white shadow-sm">

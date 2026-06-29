@@ -41,7 +41,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'シフト管理システム',
+      titleTemplate: '%s | シフト管理',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },

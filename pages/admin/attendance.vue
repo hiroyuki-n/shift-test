@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'admin' })
+useHead({ title: '勤怠報告' })
 
 interface Shop { id: number; name: string }
 interface AttendanceRecord {
@@ -11,7 +12,7 @@ interface AttendanceRecord {
 }
 interface FinalShift {
   id: number; date: string; userId: number; shopId: number
-  startTime: string; endTime: string
+  startTime: string; endTime: string; hourlywage: number | null
   users: { name: string; employmentType: string | null } | null
 }
 
@@ -76,6 +77,33 @@ const STATUS = {
   partial: { label: '一部',  row: 'bg-amber-50/50',   badge: 'bg-amber-100   text-amber-700'   },
   missing: { label: '未提出', row: 'bg-rose-50/30',    badge: 'bg-rose-100    text-rose-600'    },
 }
+
+// 人件費計算
+function isoToMin(iso: string | null): number {
+  if (!iso) return 0
+  const d = new Date(iso)
+  return (d.getUTCHours() * 60 + d.getUTCMinutes() + 540) % 1440
+}
+
+function calcCost(rec: AttendanceRecord): number {
+  if (rec.isAbsent || !rec.startTime || !rec.endTime) return 0
+  const shift = ptShifts.value.find(s => s.userId === rec.userId && s.date === rec.date)
+  if (!shift?.hourlywage) return 0
+  const workMin  = isoToMin(rec.endTime) - isoToMin(rec.startTime)
+  const breakMin = rec.breakStartTime && rec.breakEndTime
+    ? isoToMin(rec.breakEndTime) - isoToMin(rec.breakStartTime) : 0
+  return Math.round(Math.max(0, workMin - breakMin) / 60 * shift.hourlywage)
+}
+
+function dayCost(date: string): number {
+  return records.value
+    .filter(r => r.shopId === activeShopId.value && r.date === date)
+    .reduce((sum, r) => sum + calcCost(r), 0)
+}
+
+const monthlyLaborCost = computed(() =>
+  activeDays.value.reduce((sum, d) => sum + dayCost(d), 0)
+)
 
 // 月サマリー
 const monthlySummary = computed(() => {
@@ -149,6 +177,10 @@ function dateLabel(dateStr: string): string {
         <p class="text-2xl font-bold text-rose-700">{{ monthlySummary.missing }}</p>
         <p class="text-xs text-rose-500">日</p>
       </div>
+      <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm">
+        <p class="text-xs text-slate-500">人件費合計</p>
+        <p class="mt-1 text-xl font-bold text-slate-800">¥{{ monthlyLaborCost.toLocaleString() }}</p>
+      </div>
     </div>
 
     <!-- 日付リスト -->
@@ -170,6 +202,7 @@ function dateLabel(dateStr: string): string {
             :class="STATUS[status(dayStats(date).total, dayStats(date).recorded)].badge"
           >{{ STATUS[status(dayStats(date).total, dayStats(date).recorded)].label }}</span>
           <span class="text-xs text-slate-400">{{ dayStats(date).recorded }}/{{ dayStats(date).total }}人</span>
+          <span v-if="dayCost(date) > 0" class="text-xs font-medium text-slate-600">¥{{ dayCost(date).toLocaleString() }}</span>
           <span class="ml-auto text-slate-300 text-xs">{{ openDates.has(date) ? '▲' : '▼' }}</span>
         </button>
 
@@ -183,6 +216,7 @@ function dateLabel(dateStr: string): string {
                 <th class="px-4 py-2 text-left font-medium">退勤</th>
                 <th class="px-4 py-2 text-left font-medium">休憩</th>
                 <th class="px-4 py-2 text-center font-medium">残業(分)</th>
+                <th class="px-4 py-2 text-right font-medium">人件費</th>
                 <th class="px-4 py-2 text-center font-medium">状態</th>
               </tr>
             </thead>
@@ -192,6 +226,7 @@ function dateLabel(dateStr: string): string {
                 <template v-if="dayStats(date).recs.find(r => r.userId === shift.userId)">
                   <template v-if="dayStats(date).recs.find(r => r.userId === shift.userId)!.isAbsent">
                     <td colspan="4" class="px-4 py-2 font-medium text-rose-500">欠勤</td>
+                    <td class="px-4 py-2 text-right text-slate-300">—</td>
                     <td class="px-4 py-2 text-center"><span class="rounded-full bg-rose-100 px-2 py-0.5 text-rose-600">欠勤</span></td>
                   </template>
                   <template v-else>
@@ -204,11 +239,16 @@ function dateLabel(dateStr: string): string {
                       <span v-else class="text-slate-300">—</span>
                     </td>
                     <td class="px-4 py-2 text-center text-slate-600">{{ dayStats(date).recs.find(r => r.userId === shift.userId)!.overtimeMinutes ?? '—' }}</td>
+                    <td class="px-4 py-2 text-right font-medium text-slate-700">
+                      {{ calcCost(dayStats(date).recs.find(r => r.userId === shift.userId)!) > 0
+                        ? `¥${calcCost(dayStats(date).recs.find(r => r.userId === shift.userId)!).toLocaleString()}`
+                        : '—' }}
+                    </td>
                     <td class="px-4 py-2 text-center"><span class="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">提出済</span></td>
                   </template>
                 </template>
                 <template v-else>
-                  <td colspan="4" class="px-4 py-2 text-slate-300">未提出</td>
+                  <td colspan="5" class="px-4 py-2 text-slate-300">未提出</td>
                   <td class="px-4 py-2 text-center"><span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-400">未提出</span></td>
                 </template>
               </tr>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'shop' })
+useHead({ title: '勤怠記録' })
 
 const route  = useRoute()
 const shopId = route.params.shopId as string

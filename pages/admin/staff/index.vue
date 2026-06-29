@@ -2,6 +2,7 @@
 import { ArrowRightIcon } from '@heroicons/vue/24/outline'
 
 definePageMeta({ layout: 'admin' })
+useHead({ title: 'スタッフ一覧' })
 
 interface Staff {
   id: number

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'shop' })
+useHead({ title: 'ダッシュボード' })
 
 type EmploymentType = 'PART_TIME' | 'FULL_TIME'
 

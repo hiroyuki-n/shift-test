@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     year?: string
   }
 
-  if (!userId && !shopId) return []
+  if (!userId && !shopId && !month && !date && !year) return []
 
   const client = await serverSupabaseClient(event)
 

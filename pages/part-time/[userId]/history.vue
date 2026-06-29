@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'staff' })
+useHead({ title: 'シフト履歴' })
 
 interface FinalShift {
   id: number; date: string; startTime: string; endTime: string

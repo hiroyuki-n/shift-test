@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'staff' })
+useHead({ title: 'マイシフト' })
 
 type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 type DayStatus   = 'confirmed' | 'pending' | 'rejected'

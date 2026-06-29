@@ -2,6 +2,7 @@
 import { ArrowLeftIcon } from '@heroicons/vue/24/outline'
 
 definePageMeta({ layout: 'admin' })
+useHead({ title: 'スタッフ詳細' })
 
 type EmploymentType = 'PART_TIME' | 'FULL_TIME'
 
@@ -156,85 +157,80 @@ function formatDate(iso: string) {
     </header>
 
     <!-- 基本情報 -->
-    <section class="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+    <section class="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div class="border-b border-slate-100 px-6 py-3">
         <h2 class="text-sm font-semibold text-slate-700">基本情報</h2>
       </div>
-      <dl class="divide-y divide-slate-100">
-        <div class="flex items-center justify-between px-6 py-3">
-          <dt class="text-sm text-slate-500">スタッフID</dt>
-          <dd class="font-mono text-sm font-medium text-slate-800">{{ staff?.id }}</dd>
-        </div>
-        <div class="flex items-center justify-between px-6 py-3">
-          <dt class="text-sm text-slate-500">雇用形態</dt>
-          <dd>
-            <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-              :class="staff?.employmentType === 'FULL_TIME' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'">
-              {{ staff?.employmentType ? employmentLabel[staff.employmentType] : '—' }}
-            </span>
-          </dd>
-        </div>
-        <div class="flex items-center justify-between px-6 py-3">
-          <dt class="text-sm text-slate-500">所属店舗</dt>
-          <dd class="text-sm font-medium text-slate-800">{{ shopName }}</dd>
-        </div>
-        <div class="flex items-center justify-between px-6 py-3">
-          <dt class="text-sm text-slate-500">在籍状態</dt>
-          <dd class="flex items-center gap-3">
-            <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-              :class="staff?.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'">
-              {{ staff?.isActive ? '在籍中' : '退職済み' }}
-            </span>
-            <button
-              class="rounded-lg border px-3 py-1 text-xs font-semibold transition disabled:opacity-50"
-              :class="staff?.isActive
-                ? 'border-rose-300 text-rose-600 hover:bg-rose-50'
-                : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'"
-              :disabled="activeToggling"
-              @click="toggleActive"
-            >
-              {{ activeToggling ? '更新中…' : staff?.isActive ? '退職にする' : '在籍に戻す' }}
-            </button>
-          </dd>
-        </div>
-        <div v-if="activeError" class="px-6 pb-2">
-          <p class="text-xs text-rose-600">{{ activeError }}</p>
-        </div>
-        <div class="flex items-center justify-between px-6 py-3">
-          <dt class="text-sm text-slate-500">登録日</dt>
-          <dd class="text-sm text-slate-800">{{ staff?.createdAt ? formatDate(staff.createdAt) : '—' }}</dd>
-        </div>
-      </dl>
-    </section>
-
-    <!-- アルバイト設定（時給） -->
-    <section v-if="staff?.employmentType === 'PART_TIME'" class="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div class="border-b border-slate-100 px-6 py-3">
-        <h2 class="text-sm font-semibold text-slate-700">アルバイト設定</h2>
-      </div>
-      <div class="px-6 py-5">
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium text-slate-500">時給（円）</span>
-          <div class="flex items-center gap-2">
-            <input
-              v-model.number="settingValue"
-              type="number"
-              min="0"
-              placeholder="例: 1100"
-              class="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-              @focus="initSettingEdit"
-            />
-            <span class="text-sm text-slate-500">円 / 時</span>
-          </div>
-        </label>
-        <p class="mt-1 text-xs text-slate-400">現在: {{ staff.part_time_settings?.hourlywage != null ? `${staff.part_time_settings.hourlywage} 円` : '未設定' }}</p>
-        <p v-if="settingError" class="mt-2 text-xs text-rose-600">{{ settingError }}</p>
-        <button
-          class="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
-          :disabled="settingSaving"
-          @click="saveSetting"
-        >{{ settingSaving ? '保存中…' : '保存する' }}</button>
-      </div>
+      <table class="w-full text-sm">
+        <tbody class="divide-y divide-slate-100">
+          <tr>
+            <th class="w-36 bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">スタッフID</th>
+            <td class="px-6 py-3 font-mono text-xs text-slate-600">{{ staff?.id }}</td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">氏名</th>
+            <td class="px-6 py-3 font-medium text-slate-800">{{ staff?.name ?? '—' }}</td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">雇用形態</th>
+            <td class="px-6 py-3">
+              <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                :class="staff?.employmentType === 'FULL_TIME' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'">
+                {{ staff?.employmentType ? employmentLabel[staff.employmentType] : '—' }}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">所属店舗</th>
+            <td class="px-6 py-3 text-slate-800">{{ shopName }}</td>
+          </tr>
+          <tr v-if="staff?.employmentType === 'PART_TIME'">
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">時給</th>
+            <td class="px-6 py-3">
+              <div class="flex items-center gap-2">
+                <input
+                  v-model.number="settingValue"
+                  type="number" min="0" placeholder="例: 1100"
+                  class="w-32 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
+                  @focus="initSettingEdit"
+                />
+                <span class="text-sm text-slate-400">円 / 時</span>
+                <button
+                  class="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                  :disabled="settingSaving"
+                  @click="saveSetting"
+                >{{ settingSaving ? '保存中…' : '保存' }}</button>
+                <p v-if="settingError" class="text-xs text-rose-600">{{ settingError }}</p>
+              </div>
+              <p class="mt-1 text-xs text-slate-400">現在: {{ staff.part_time_settings?.hourlywage != null ? `¥${staff.part_time_settings.hourlywage.toLocaleString()}` : '未設定' }}</p>
+            </td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">在籍状態</th>
+            <td class="px-6 py-3">
+              <div class="flex items-center gap-3">
+                <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                  :class="staff?.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'">
+                  {{ staff?.isActive ? '在籍中' : '退職済み' }}
+                </span>
+                <button
+                  class="rounded-lg border px-3 py-1 text-xs font-semibold transition disabled:opacity-50"
+                  :class="staff?.isActive
+                    ? 'border-rose-300 text-rose-600 hover:bg-rose-50'
+                    : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'"
+                  :disabled="activeToggling"
+                  @click="toggleActive"
+                >{{ activeToggling ? '更新中…' : staff?.isActive ? '退職にする' : '在籍に戻す' }}</button>
+                <p v-if="activeError" class="text-xs text-rose-600">{{ activeError }}</p>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <th class="bg-slate-50 px-6 py-3 text-left text-xs font-medium text-slate-500">登録日</th>
+            <td class="px-6 py-3 text-slate-600">{{ staff?.createdAt ? formatDate(staff.createdAt) : '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
     </section>
 
     <!-- 給与累計（アルバイトのみ） -->

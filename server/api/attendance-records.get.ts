@@ -1,8 +1,8 @@
 import { serverSupabaseClient } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
-  const { shopId, date, month, userId } = getQuery(event) as {
-    shopId?: string; date?: string; month?: string; userId?: string
+  const { shopId, date, month, userId, year } = getQuery(event) as {
+    shopId?: string; date?: string; month?: string; userId?: string; year?: string
   }
 
   const client = await serverSupabaseClient(event)
@@ -15,6 +15,8 @@ export default defineEventHandler(async (event) => {
   if (shopId) query = query.eq('shopId', shopId)
   if (userId) query = query.eq('userId', userId)
 
+  if (!shopId && !userId && !date && !month && !year) return []
+
   if (date) {
     query = query.eq('date', date)
   } else if (month) {
@@ -22,6 +24,8 @@ export default defineEventHandler(async (event) => {
     query = query
       .gte('date', `${month}-01`)
       .lte('date', `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`)
+  } else if (year) {
+    query = query.gte('date', `${year}-01-01`).lte('date', `${year}-12-31`)
   }
 
   const { data, error } = await query
